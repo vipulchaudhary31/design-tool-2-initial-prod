@@ -15,7 +15,7 @@ interface ConceptGeneratorProps {
 }
 
 type AspectRatio = '3:4' | '9:16';
-type ImageStyle = 
+type ImageStyle =
   | 'Realistic photography'
   | 'Cinematic realism'
   | 'Digital illustration'
@@ -32,7 +32,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Configuration states
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4');
   const [imageStyle, setImageStyle] = useState<ImageStyle>('Realistic photography');
@@ -46,7 +46,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
       setError('Please enter a concept');
       return;
     }
-    
+
     if (!useSystemPrompt && !customPrompt.trim()) {
       setError('Please enter a custom prompt');
       return;
@@ -59,7 +59,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
 
     try {
       const finalStyle = imageStyle === 'Other' ? customStyle : imageStyle;
-      
+
       // Call backend API to generate images
       const response = await fetch('/api/generate-images', {
         method: 'POST',
@@ -99,7 +99,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
 
   const handleDownload = async (imageUrl: string, imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
@@ -117,7 +117,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
     }
   };
 
-  const canGenerate = useSystemPrompt 
+  const canGenerate = useSystemPrompt
     ? concept.trim().length > 0 && (imageStyle !== 'Other' || customStyle.trim().length > 0)
     : customPrompt.trim().length > 0;
 
@@ -130,7 +130,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
             <Sparkles className="w-4 h-4 text-purple-600" />
             <span className="text-sm font-semibold text-purple-900">AI-Powered Template Generator</span>
           </div>
-          
+
           <Button
             onClick={onSkip}
             variant="outline"
@@ -153,33 +153,6 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Generation Settings</h2>
-              
-              {/* System Prompt Toggle */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <label htmlFor="systemPromptToggle" className="text-sm font-bold text-gray-900 cursor-pointer">
-                      Use System Prompt
-                    </label>
-                    <p className="text-xs text-gray-600 mt-1">
-                      When enabled, uses optimized backend prompt with your concept
-                    </p>
-                  </div>
-                  <button
-                    id="systemPromptToggle"
-                    onClick={() => setUseSystemPrompt(!useSystemPrompt)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      useSystemPrompt ? 'bg-purple-600' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        useSystemPrompt ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
 
               {/* Concept Input (System Prompt Mode) */}
               {useSystemPrompt ? (
@@ -193,29 +166,9 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                     onChange={(e) => setConcept(e.target.value)}
                     placeholder="E.g., 'Diwali festival celebration with diyas and lights', 'Good morning with peaceful sunrise', 'Motivational quote about success'..."
                     className="w-full px-4 py-3 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                    rows={5}
+                    rows={6}
                     disabled={isGenerating}
                   />
-                  
-                  {/* Number of Images */}
-                  <div className="mt-4">
-                    <label htmlFor="imageCount" className="block text-sm font-bold text-gray-900 mb-2">
-                      Number of images to generate
-                    </label>
-                    <select
-                      id="imageCount"
-                      value={imageCount}
-                      onChange={(e) => setImageCount(Number(e.target.value))}
-                      className="w-full px-4 py-2.5 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                      disabled={isGenerating}
-                    >
-                      <option value={1}>1 image</option>
-                      <option value={2}>2 images</option>
-                      <option value={3}>3 images</option>
-                      <option value={4}>4 images</option>
-                      <option value={6}>6 images</option>
-                    </select>
-                  </div>
                 </>
               ) : (
                 <>
@@ -228,31 +181,57 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                     onChange={(e) => setCustomPrompt(e.target.value)}
                     placeholder="Enter your complete custom prompt here. This will be sent directly to the AI model without any system prompt preprocessing..."
                     className="w-full px-4 py-3 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                    rows={8}
+                    rows={9}
                     disabled={isGenerating}
                   />
-                  
-                  {/* Number of Images */}
-                  <div className="mt-4">
-                    <label htmlFor="imageCountCustom" className="block text-sm font-bold text-gray-900 mb-2">
-                      Number of images to generate
-                    </label>
-                    <select
-                      id="imageCountCustom"
-                      value={imageCount}
-                      onChange={(e) => setImageCount(Number(e.target.value))}
-                      className="w-full px-4 py-2.5 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                      disabled={isGenerating}
-                    >
-                      <option value={1}>1 image</option>
-                      <option value={2}>2 images</option>
-                      <option value={3}>3 images</option>
-                      <option value={4}>4 images</option>
-                      <option value={6}>6 images</option>
-                    </select>
-                  </div>
                 </>
               )}
+
+              {/* Toggle and Number of Images in Same Row */}
+              <div className="mt-4 flex items-center gap-4">
+                {/* System Prompt Toggle */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex flex-col">
+                    <label htmlFor="systemPromptToggle" className="text-xs font-bold text-gray-900 cursor-pointer">
+                      Use System Prompt
+                    </label>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      Optimized backend prompt
+                    </p>
+                  </div>
+                  <button
+                    id="systemPromptToggle"
+                    onClick={() => setUseSystemPrompt(!useSystemPrompt)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${useSystemPrompt ? 'bg-purple-600' : 'bg-gray-300'
+                      }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${useSystemPrompt ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Number of Images */}
+                <div className="flex-1">
+                  <label htmlFor="imageCount" className="block text-xs font-bold text-gray-900 mb-1.5">
+                    Number of images
+                  </label>
+                  <select
+                    id="imageCount"
+                    value={imageCount}
+                    onChange={(e) => setImageCount(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                    disabled={isGenerating}
+                  >
+                    <option value={1}>1 image</option>
+                    <option value={2}>2 images</option>
+                    <option value={3}>3 images</option>
+                    <option value={4}>4 images</option>
+                    <option value={6}>6 images</option>
+                  </select>
+                </div>
+              </div>
 
               {error && (
                 <p className="text-sm text-red-600 mt-3 flex items-center gap-2">
@@ -264,11 +243,10 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || !canGenerate}
-                className={`w-full h-12 font-semibold text-sm transition-all duration-200 mt-6 ${
-                  isGenerating || !canGenerate
-                    ? 'bg-gray-300 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg shadow-purple-200 hover:shadow-xl'
-                }`}
+                className={`w-full h-12 font-semibold text-sm transition-all duration-200 mt-6 ${isGenerating || !canGenerate
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg shadow-purple-200 hover:shadow-xl'
+                  }`}
               >
                 {isGenerating ? (
                   <>
@@ -318,23 +296,66 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                 Configuration
               </h2>
 
-              {/* Aspect Ratio */}
+              {/* Aspect Ratio - Box Selection */}
               <div className="mb-6">
-                <label htmlFor="aspectRatio" className="block text-sm font-bold text-gray-900 mb-2">
+                <label className="block text-sm font-bold text-gray-900 mb-3">
                   Aspect Ratio
                 </label>
-                <select
-                  id="aspectRatio"
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
-                  className="w-full px-4 py-2.5 text-sm border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                  disabled={isGenerating || !useSystemPrompt}
-                >
-                  <option value="3:4">3:4 (1080×1440px)</option>
-                  <option value="9:16">9:16 (1080×1920px)</option>
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setAspectRatio('3:4')}
+                    disabled={isGenerating || !useSystemPrompt}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${aspectRatio === '3:4'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 bg-white hover:border-purple-300'
+                      } ${(isGenerating || !useSystemPrompt) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <div className={`w-12 h-16 rounded border-2 ${aspectRatio === '3:4' ? 'border-purple-500 bg-purple-100' : 'border-gray-300 bg-gray-50'
+                        }`} />
+                      <div className="text-center">
+                        <div className="text-sm font-bold text-gray-900">3:4</div>
+                        <div className="text-xs text-gray-600">1080×1440px</div>
+                      </div>
+                    </div>
+                    {aspectRatio === '3:4' && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setAspectRatio('9:16')}
+                    disabled={isGenerating || !useSystemPrompt}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${aspectRatio === '9:16'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 bg-white hover:border-purple-300'
+                      } ${(isGenerating || !useSystemPrompt) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <div className={`w-9 h-16 rounded border-2 ${aspectRatio === '9:16' ? 'border-purple-500 bg-purple-100' : 'border-gray-300 bg-gray-50'
+                        }`} />
+                      <div className="text-center">
+                        <div className="text-sm font-bold text-gray-900">9:16</div>
+                        <div className="text-xs text-gray-600">1080×1920px</div>
+                      </div>
+                    </div>
+                    {aspectRatio === '9:16' && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                </div>
                 {!useSystemPrompt && (
-                  <p className="text-xs text-amber-600 mt-1">Configure in custom prompt</p>
+                  <p className="text-xs text-amber-600 mt-2">Configure in custom prompt</p>
                 )}
               </div>
 
@@ -381,17 +402,6 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                   />
                 </div>
               )}
-
-              {/* Info Panel */}
-              <div className="mt-6 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                <p className="text-xs text-purple-900 font-semibold mb-2">ℹ️ How it works:</p>
-                <ul className="text-xs text-purple-800 space-y-1.5">
-                  <li>• <strong>System Prompt ON:</strong> Backend uses optimized prompt template with your inputs</li>
-                  <li>• <strong>System Prompt OFF:</strong> Your custom prompt sent directly to AI</li>
-                  <li>• All prompt logic lives in the backend</li>
-                  <li>• UI only manages inputs and state</li>
-                </ul>
-              </div>
             </div>
           </div>
         </div>
@@ -403,24 +413,23 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
               <Sparkles className="w-5 h-5 text-purple-600" />
               Generated Images ({generatedImages.length})
             </h2>
-            
+
             <div className="grid grid-cols-3 gap-4 mb-6">
               {generatedImages.map((image) => (
                 <div key={image.id} className="relative group">
                   <button
                     onClick={() => setSelectedImage(image.url)}
-                    className={`relative w-full aspect-[3/4] rounded-xl overflow-hidden border-4 transition-all transform hover:scale-105 ${
-                      selectedImage === image.url
-                        ? 'border-purple-500 shadow-xl shadow-purple-200 ring-4 ring-purple-200'
-                        : 'border-gray-200 hover:border-purple-300'
-                    }`}
+                    className={`relative w-full aspect-[3/4] rounded-xl overflow-hidden border-4 transition-all transform hover:scale-105 ${selectedImage === image.url
+                      ? 'border-purple-500 shadow-xl shadow-purple-200 ring-4 ring-purple-200'
+                      : 'border-gray-200 hover:border-purple-300'
+                      }`}
                   >
                     <img
                       src={image.url}
                       alt={`Generated ${image.id}`}
                       className="w-full h-full object-cover"
                     />
-                    
+
                     {selectedImage === image.url && (
                       <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center">
                         <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center">
@@ -430,10 +439,10 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all pointer-events-none" />
                   </button>
-                  
+
                   <button
                     onClick={(e) => handleDownload(image.url, image.id, e)}
                     className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110 z-10"
