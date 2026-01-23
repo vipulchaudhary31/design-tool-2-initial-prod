@@ -141,6 +141,8 @@ export default function App() {
     setBackgroundImage(imageUrl);
     setGeneratedConcept(concept);
     setCurrentPage('designer');
+    // Scroll to top when navigating to designer
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     toast.success('Image selected!', {
       description: 'Now customize your template design.',
     });
@@ -148,6 +150,8 @@ export default function App() {
 
   const handleSkipToDesigner = () => {
     setCurrentPage('designer');
+    // Scroll to top when navigating to designer
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     toast.info('Skipped to designer', {
       description: 'You can upload your own background image in the designer.',
     });
@@ -180,11 +184,27 @@ export default function App() {
 
     console.log('Export Payload:', payload);
 
+    // Download as text file
+    const jsonString = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    link.download = `template-${timestamp}.json`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
     toast.success('Template uploaded successfully!', {
-      description: 'The template has been saved and is ready for end users.',
+      description: 'Congratulations!',
     });
 
-    // In production, this would send to backend:
+    // In production, this would also send to backend:
     // await fetch('/api/templates', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
@@ -202,14 +222,18 @@ export default function App() {
           <div className="flex items-center gap-4">
             <img src={lokalLogo} alt="Lokal" className="h-10 w-10 rounded-lg" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Template Design Studio</h1>
-              <p className="text-sm text-gray-600">Create personalized image templates for your community</p>
+              <h1 className="text-xl font-bold text-gray-900">Template Studio</h1>
+              <p className="text-sm text-gray-600">Create share-ready image templates</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {currentPage === 'designer' && (
               <button
-                onClick={() => setCurrentPage('concept')}
+                onClick={() => {
+                  setCurrentPage('concept');
+                  // Scroll to top when going back to concept
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 className="px-4 py-2 text-sm font-semibold text-gray-700 hover:text-purple-600 transition-colors"
               >
                 ← Back to Concept

@@ -124,41 +124,48 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
   return (
     <div className="min-h-[calc(100vh-100px)] p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Skip Button */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full">
+        {/* Compact Header - All in one row */}
+        <div className="flex items-center justify-between mb-8 gap-4">
+          {/* Left: Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full flex-shrink-0">
             <Sparkles className="w-4 h-4 text-purple-600" />
             <span className="text-sm font-semibold text-purple-900">AI-Powered Template Generator</span>
           </div>
 
+          {/* Center: Title */}
+          <div className="flex-1 text-center">
+            <h1 className="text-4xl font-bold text-gray-900">
+              What do you want to create?
+            </h1>
+          </div>
+
+          {/* Right: Skip Button */}
           <Button
             onClick={onSkip}
             variant="outline"
-            className="flex items-center gap-2 border-2 border-gray-300 hover:border-purple-400 hover:bg-purple-50"
+            className="flex items-center gap-2 border-2 border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex-shrink-0"
           >
             <SkipForward className="w-4 h-4" />
-            Skip to Designer
+            Go to image placement tool
           </Button>
         </div>
 
-        <h1 className="text-4xl font-bold text-gray-900 mb-2 text-center">
-          Describe Your Vision
-        </h1>
-        <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-12 text-center">
-          Configure your preferences and let AI generate stunning background images for your template
+        {/* Subtitle */}
+        <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-8 text-center">
+          Tell us the idea. We'll generate background options for you.
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Concept Input */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Generation Settings</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-6">Background Setup</h2>
 
               {/* Concept Input (System Prompt Mode) */}
               {useSystemPrompt ? (
                 <>
                   <label htmlFor="concept" className="block text-sm font-bold text-gray-900 mb-3">
-                    What's your concept?
+                    Describe the background
                   </label>
                   <textarea
                     id="concept"
@@ -193,7 +200,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                 <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
                   <div className="flex flex-col">
                     <label htmlFor="systemPromptToggle" className="text-xs font-bold text-gray-900 cursor-pointer">
-                      Use System Prompt
+                      Use smart defaults
                     </label>
                     <p className="text-[10px] text-gray-500 mt-0.5">
                       Optimized backend prompt
@@ -256,7 +263,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                 ) : (
                   <>
                     <Wand2 className="mr-2 h-5 w-5" />
-                    Generate Images
+                    Generate backgrounds
                   </>
                 )}
               </Button>
@@ -264,7 +271,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
               {/* Example Prompts (only in system prompt mode) */}
               {useSystemPrompt && !isGenerating && generatedImages.length === 0 && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
-                  <p className="text-xs font-semibold text-gray-700 mb-3">Try these examples:</p>
+                  <p className="text-xs font-semibold text-gray-700 mb-3">Quick ideas</p>
                   <div className="flex flex-wrap gap-2">
                     {[
                       'Diwali festival with diyas and rangoli',
@@ -293,7 +300,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
                 <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
-                Configuration
+                Layout & Style
               </h2>
 
               {/* Aspect Ratio - Box Selection */}
@@ -362,7 +369,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
               {/* Image Style */}
               <div className="mb-6">
                 <label htmlFor="imageStyle" className="block text-sm font-bold text-gray-900 mb-2">
-                  Image Style
+                  Background style
                 </label>
                 <select
                   id="imageStyle"
