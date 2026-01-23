@@ -13,7 +13,7 @@ import { ConceptGenerator } from '@/app/components/ConceptGenerator';
 import { Toaster } from '@/app/components/ui/sonner';
 import { toast } from 'sonner';
 import lokalLogo from '@/assets/7f52afd4f9acd98b14c7800f5a0a27def664508d.png';
-import '@/services/apiInterceptor'; // Initialize API interceptor (handles both mock and real AI)
+//import '@/services/apiInterceptor'; // Initialize API interceptor (handles both mock and real AI)
 
 interface ImagePlaceholder {
   x: number;

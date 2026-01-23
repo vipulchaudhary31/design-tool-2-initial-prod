@@ -61,7 +61,7 @@ export function ConceptGenerator({ onImageSelect, onSkip }: ConceptGeneratorProp
       const finalStyle = imageStyle === 'Other' ? customStyle : imageStyle;
 
       // Call backend API to generate images
-      const response = await fetch('/api/generate-images', {
+      const response = await fetch('http://localhost:3001/api/generate-images', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
