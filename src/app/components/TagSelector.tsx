@@ -1,21 +1,20 @@
 import { X } from 'lucide-react';
+import { Label } from '@/app/components/ui/label';
 
 interface TagSelectorProps {
   title: string;
-  description: string;
   availableTags: string[];
   selectedTags: string[];
   onTagsChange: (tags: string[]) => void;
   required?: boolean;
 }
 
-export function TagSelector({ 
+export function TagSelector({
   title,
-  description,
   availableTags,
-  selectedTags, 
+  selectedTags,
   onTagsChange,
-  required = false
+  required = false,
 }: TagSelectorProps) {
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -26,44 +25,36 @@ export function TagSelector({
   };
 
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs font-bold text-gray-900 mb-1 block uppercase tracking-wide">
-          {title} {required && selectedTags.length === 0 && <span className="text-red-500">*</span>}
-        </label>
-        <p className="text-xs text-gray-500">{description}</p>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs text-muted-foreground">
+          {title}
+          {required && selectedTags.length === 0 && <span className="text-destructive ml-0.5">*</span>}
+        </Label>
+        {selectedTags.length > 0 && (
+          <span className="text-[10px] text-primary">{selectedTags.length} selected</span>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1">
         {availableTags.map(tag => {
           const isSelected = selectedTags.includes(tag);
           return (
             <button
               key={tag}
               onClick={() => toggleTag(tag)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-all duration-150 ${
+              className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-colors ${
                 isSelected
-                  ? 'bg-amber-500 text-white border-amber-500 shadow-md hover:bg-amber-600'
-                  : 'bg-white text-gray-700 border-gray-200 hover:border-amber-300 hover:bg-amber-50'
+                  ? 'bg-primary/15 text-primary border-primary/30 hover:bg-primary/20'
+                  : 'bg-transparent text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
               }`}
             >
               {tag}
-              {isSelected && <X className="h-3 w-3" />}
+              {isSelected && <X className="h-2.5 w-2.5" />}
             </button>
           );
         })}
       </div>
-
-      {selectedTags.length > 0 && (
-        <div className="flex items-center gap-2 text-xs">
-          <div className="flex-shrink-0 w-5 h-5 bg-amber-100 rounded-full flex items-center justify-center">
-            <span className="text-amber-700 font-bold text-[10px]">{selectedTags.length}</span>
-          </div>
-          <span className="text-gray-600 font-medium">
-            {selectedTags.length} tag{selectedTags.length !== 1 ? 's' : ''} selected
-          </span>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,0 +1,41 @@
+import svgPaths from "./svg-8gqfakuhlc";
+
+export default function Lsd() {
+  return (
+    <div className="relative size-full" data-name="lsd">
+      <div className="absolute h-[212px] left-0 top-0 w-[478px]" data-name="Vector">
+        <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 478 212">
+          <g id="Vector">
+            <path d={svgPaths.p3af2fe00} fill="url(#paint0_linear_2059_65)" />
+            <path d={svgPaths.p3aa5db00} fill="url(#paint1_linear_2059_65)" />
+            <path d={svgPaths.p1ca40e80} fill="url(#paint2_linear_2059_65)" />
+            <path d={svgPaths.p1eac9800} fill="url(#paint3_linear_2059_65)" />
+          </g>
+          <defs>
+            <linearGradient gradientUnits="userSpaceOnUse" id="paint0_linear_2059_65" x1="-7.6551e-07" x2="454.5" y1="158.5" y2="41">
+              <stop stopColor="#DE04F1" />
+              <stop offset="0.5" stopColor="#F84F29" />
+              <stop offset="1" stopColor="#FDA900" />
+            </linearGradient>
+            <linearGradient gradientUnits="userSpaceOnUse" id="paint1_linear_2059_65" x1="-7.6551e-07" x2="454.5" y1="158.5" y2="41">
+              <stop stopColor="#DE04F1" />
+              <stop offset="0.5" stopColor="#F84F29" />
+              <stop offset="1" stopColor="#FDA900" />
+            </linearGradient>
+            <linearGradient gradientUnits="userSpaceOnUse" id="paint2_linear_2059_65" x1="-7.6551e-07" x2="454.5" y1="158.5" y2="41">
+              <stop stopColor="#DE04F1" />
+              <stop offset="0.5" stopColor="#F84F29" />
+              <stop offset="1" stopColor="#FDA900" />
+            </linearGradient>
+            <linearGradient gradientUnits="userSpaceOnUse" id="paint3_linear_2059_65" x1="-7.6551e-07" x2="454.5" y1="158.5" y2="41">
+              <stop stopColor="#DE04F1" />
+              <stop offset="0.5" stopColor="#F84F29" />
+              <stop offset="1" stopColor="#FDA900" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <p className="absolute font-['Author:Medium',sans-serif] leading-[18.2px] left-[11px] not-italic text-[22.214px] text-white top-[14px] w-[78px] whitespace-pre-wrap">LOKAL SCHOOL OF DESIGN</p>
+    </div>
+  );
+}

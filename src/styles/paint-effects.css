@@ -1,0 +1,81 @@
+/* Artistic Paint Stroke Effects for Image Borders */
+
+@keyframes paint-flow {
+  0%, 100% {
+    filter: hue-rotate(0deg) saturate(1.2) brightness(1.1);
+  }
+  33% {
+    filter: hue-rotate(10deg) saturate(1.3) brightness(1.15);
+  }
+  66% {
+    filter: hue-rotate(-10deg) saturate(1.25) brightness(1.12);
+  }
+}
+
+@keyframes wave-pulse {
+  0%, 100% {
+    filter: hue-rotate(0deg) saturate(1.3) brightness(1.15);
+    transform: scale(1);
+  }
+  50% {
+    filter: hue-rotate(15deg) saturate(1.4) brightness(1.2);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes sunset-shimmer {
+  0%, 100% {
+    filter: hue-rotate(0deg) saturate(1.4) brightness(1.1);
+  }
+  50% {
+    filter: hue-rotate(-5deg) saturate(1.5) brightness(1.2);
+  }
+}
+
+@keyframes aurora-dance {
+  0%, 100% {
+    filter: hue-rotate(0deg) saturate(1.3) brightness(1.1);
+    transform: rotate(0deg) scale(1);
+  }
+  33% {
+    filter: hue-rotate(20deg) saturate(1.4) brightness(1.15);
+    transform: rotate(1deg) scale(1.01);
+  }
+  66% {
+    filter: hue-rotate(-20deg) saturate(1.35) brightness(1.12);
+    transform: rotate(-1deg) scale(1.01);
+  }
+}
+
+/* Paint Flow Effect Classes */
+.paint-flow-effect {
+  animation: paint-flow 4s ease-in-out infinite;
+}
+
+.vibrant-waves-effect {
+  animation: wave-pulse 3s ease-in-out infinite;
+}
+
+.sunset-glow-effect {
+  animation: sunset-shimmer 5s ease-in-out infinite;
+}
+
+.aurora-effect {
+  animation: aurora-dance 6s ease-in-out infinite;
+}
+
+/* Organic blur layers for paint strokes */
+.paint-stroke-blur {
+  filter: blur(8px) saturate(1.5);
+  opacity: 0.8;
+}
+
+.paint-stroke-blur-sm {
+  filter: blur(4px) saturate(1.3);
+  opacity: 0.9;
+}
+
+.paint-stroke-blur-lg {
+  filter: blur(12px) saturate(1.6);
+  opacity: 0.7;
+}

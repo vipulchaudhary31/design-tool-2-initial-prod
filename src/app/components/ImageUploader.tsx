@@ -1,72 +1,74 @@
 import { useRef } from 'react';
-import { Upload, Image } from 'lucide-react';
+import { Upload, ImageIcon, Video, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { toast } from 'sonner';
 
-interface ImageUploaderProps {
-  onImageUpload: (imageUrl: string) => void;
-  hasImage: boolean;
+const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
+interface ImageUploaderProps {
+  onImageUpload: (imageUrl: string, mediaType: 'image' | 'video') => void;
+  hasImage: boolean;
+  mediaType?: 'image' | 'video';
+}
+
+export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    const isVideo = file.type.startsWith('video/');
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+    const maxLabel = isVideo ? '50 MB' : '15 MB';
+    if (file.size > maxSize) {
+      toast.error(`File too large (${formatFileSize(file.size)})`, {
+        description: `${isVideo ? 'Video' : 'Image'} files must be under ${maxLabel}.`,
+      });
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      onImageUpload(base64String);
-    };
+    reader.onloadend = () => onImageUpload(reader.result as string, isVideo ? 'video' : 'image');
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   return (
     <div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-      
-      {!hasImage && (
-        <div 
+      <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileChange} className="hidden" />
+
+      {!hasImage ? (
+        <button
           onClick={() => fileInputRef.current?.click()}
-          className="group relative p-8 border-2 border-dashed border-gray-300 rounded-xl text-center cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-all duration-200"
+          className="w-full group flex flex-col items-center gap-2.5 py-6 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
         >
-          <div className="flex flex-col items-center">
-            <div className="w-14 h-14 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <Upload className="h-7 w-7 text-amber-600" />
-            </div>
-            <p className="text-sm font-semibold text-gray-900 mb-1">Upload Background</p>
-            <p className="text-xs text-gray-500">
-              Any size accepted - you'll crop it next
-            </p>
+          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+            <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-        </div>
-      )}
-      
-      {hasImage && (
-        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Image className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-green-900">Image Loaded</p>
-              <p className="text-xs text-green-700">Ready to design</p>
-            </div>
+          <div className="text-center">
+            <p className="text-sm text-foreground/80">Upload Background</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Images or videos</p>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            className="border-green-300 hover:bg-green-100 hover:border-green-400"
-          >
-            Replace
+        </button>
+      ) : (
+        <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/60">
+          <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+            mediaType === 'video' ? 'bg-chart-5/15 text-chart-5' : 'bg-chart-2/15 text-chart-2'
+          }`}>
+            {mediaType === 'video' ? <Video className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-foreground/80">{mediaType === 'video' ? 'Video' : 'Image'} loaded</p>
+            <p className="text-[11px] text-muted-foreground">Ready to design</p>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
+            <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>
       )}

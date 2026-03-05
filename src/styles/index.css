@@ -1,3 +1,18 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import './paint-effects.css';
+
+/* Hide sidebar scrollbar thumb when not hovering the aside panel */
+aside .overflow-y-auto {
+  scrollbar-color: transparent transparent;
+}
+aside:hover .overflow-y-auto {
+  scrollbar-color: var(--border) transparent;
+}
+aside .overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+aside:hover .overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+}

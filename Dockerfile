@@ -24,7 +24,7 @@
   # Copy built assets from builder stage
   COPY --from=builder /app/dist /usr/share/nginx/html
 
-  # Expose port 80
+  # Expose port 8080
   EXPOSE 8080
 
   # Start nginx

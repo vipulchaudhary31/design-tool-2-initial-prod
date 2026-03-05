@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {toast} from 'sonner';
-import lokalLogo from "@/assets/7f52afd4f9acd98b14c7800f5a0a27def664508d.png";
+import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 
 interface LoginProps {
   onLogin: () => void;
