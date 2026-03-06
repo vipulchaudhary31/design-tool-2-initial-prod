@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Download } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 
 interface ExportPanelProps {
@@ -11,6 +11,7 @@ interface ExportPanelProps {
   canvasWidth: number;
   canvasHeight: number;
   onExport: () => void;
+  isExporting?: boolean;
 }
 
 export function ExportPanel({
@@ -22,6 +23,7 @@ export function ExportPanel({
   canvasWidth,
   canvasHeight,
   onExport,
+  isExporting = false,
 }: ExportPanelProps) {
   const checks = [
     { ok: !!backgroundImage, label: 'Background uploaded' },
@@ -59,9 +61,13 @@ export function ExportPanel({
           </div>
         ))}
       </div>
-      <Button onClick={onExport} disabled={!allValid} className="w-full gap-2" size="sm">
-        <Download className="w-3.5 h-3.5" />
-        {allValid ? 'Export Template' : 'Complete all checks'}
+      <Button onClick={onExport} disabled={!allValid || isExporting} className="w-full gap-2" size="sm">
+        {isExporting ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Download className="w-3.5 h-3.5" />
+        )}
+        {isExporting ? 'Exporting…' : allValid ? 'Export Template' : 'Complete all checks'}
       </Button>
     </div>
   );

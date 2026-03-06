@@ -23,6 +23,13 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/app/compo
 import { LsdEasterEgg, LsdCredit } from '@/app/components/LsdEasterEgg';
 import type { CompactTemplateJSON } from '@/templateSchema';
 import Login from '@/app/Login';
+import { getToken, clearToken } from '@/api/client';
+import { getLanguages } from '@/api/languages/languages';
+import { getCategories } from '@/api/categories/categories';
+import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
+import { uploadImage } from '@/api/upload-image/uploadImage';
+import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
+import type { ImageContentType } from '@/api/get-presigned-url/types';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
   Upload, Tags, Download, User, Circle, Square,
@@ -70,30 +77,6 @@ function computeAspectRatioString(width: number, height: number): string {
   return `${sw}:${sh}`;
 }
 
-// Tags list trimmed to the approved sheet:
-// - Sheet "Profile" → UI "Self"
-// - Sheet "Upload"  → UI "Wishes"
-const PROFILE_TAGS = [
-  'Health',
-  'Good Night',
-  'Devotional',
-  'Good Morning',
-  'Life',
-  'Sad',
-  'Love',
-  'Parents',
-  'Motivation',
-  'Money',
-  'Friendship',
-  'Personalities',
-  'Events',
-];
-
-const UPLOAD_TAGS = ['Birthday', 'Anniversary'];
-
-const LANGUAGE_TAGS = [
-  'Bengali','English','Gujarati','Hindi','Kannada','Malayalam','Marathi','Punjabi','Tamil','Telugu'
-];
 
 /* ── Collapsible panel section ─────────────────────────────────────── */
 function PanelSection({ title, icon, children, defaultOpen = true, badge }: {
@@ -160,7 +143,34 @@ function ColorPicker({ value, onChange, onBlur, fallback = '#FFFFFF' }: {
 
 export default function App() {
   /* ================= AUTH ================= */
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!getToken());
+  const [profileTags,  setProfileTags]  = useState<string[]>([]);
+  const [uploadTags,   setUploadTags]   = useState<string[]>([]);
+  const [languageTags, setLanguageTags] = useState<string[]>([]);
+  const [languagesError,   setLanguagesError]   = useState(false);
+  const [categoriesError,  setCategoriesError]  = useState(false);
+  const [isExporting,      setIsExporting]      = useState(false);
+
+  async function fetchLanguages() {
+    setLanguagesError(false);
+    try {
+      const langs = await getLanguages();
+      setLanguageTags(langs);
+    } catch {
+      setLanguagesError(true);
+    }
+  }
+
+  async function fetchCategories() {
+    setCategoriesError(false);
+    try {
+      const cats = await getCategories();
+      setProfileTags(cats.filter(c => c.is_active &&  c.use_profile_pic).map(c => c.name));
+      setUploadTags (cats.filter(c => c.is_active && !c.use_profile_pic).map(c => c.name));
+    } catch {
+      setCategoriesError(true);
+    }
+  }
 
   /* ================= DESIGN STATE ================= */
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
@@ -177,6 +187,14 @@ export default function App() {
   const [photoStrokeWidth, setPhotoStrokeWidth] = useState<number>(0);
   const [photoStrokeColor, setPhotoStrokeColor] = useState<string>('#FFFFFF');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+
+  /* ── Fetch tag data whenever logged in (covers refresh with existing token) ── */
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchLanguages();
+      fetchCategories();
+    }
+  }, [isLoggedIn]);
 
   /* ── Set page title & favicon ── */
   useEffect(() => {
@@ -298,7 +316,7 @@ export default function App() {
     }
   };
 
-  const availableTags = isProfileTemplate ? PROFILE_TAGS : UPLOAD_TAGS;
+  const availableTags = isProfileTemplate ? profileTags : uploadTags;
 
   useEffect(() => { setSelectedTags([]); }, [isProfileTemplate]);
 
@@ -334,7 +352,7 @@ export default function App() {
     setNameHolder(prev => prev.height !== autoH ? { ...prev, height: autoH } : prev);
   }, [textStyle.fontSize, canvasHeight]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (selectedTags.length === 0) {
       toast.error('Select at least 1 primary category.', { description: 'Pick a Self/Wishes tag before exporting.' });
       return;
@@ -344,76 +362,101 @@ export default function App() {
       return;
     }
 
-    const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
-    const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
-    const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
-    const safePhotoStrokeColor = normalizeHex(photoStrokeColor, '#FFFFFF');
-    const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
-    const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
+    setIsExporting(true);
+    try {
+      // 1. Convert background image to blob
+      const bgBlob = await fetch(backgroundImage!).then(r => r.blob());
+      const contentType = bgBlob.type as ImageContentType;
 
-    const payload: CompactTemplateJSON = {
-      ar: aspectRatioString,
-      t: isProfileTemplate,
-      pc: selectedTags,
-      lg: selectedLanguages,
-      bg: backgroundImage,
-      mt: mediaType,
-      ip: {
-        x: Math.round((imageHolder.x / CANVAS_WIDTH) * 100),
-        y: Math.round((imageHolder.y / canvasHeight) * 100),
-        d: Math.round((imageHolder.diameter / CANVAS_WIDTH) * 100),
-        sh: photoShape,
-        ...(photoShape === 'square' ? { cr: photoCornerRadius } : {}),
-        hb: photoHasBackground,
-        sw: photoStrokeWidth,
-        sc: safePhotoStrokeColor,
-      },
-      np: {
-        x: Math.round((nameHolder.x / CANVAS_WIDTH) * 100),
-        y: Math.round((nameHolder.y / canvasHeight) * 100),
-        w: Math.round((nameHolder.width / CANVAS_WIDTH) * 100),
-        h: Math.round((nameHolder.height / canvasHeight) * 100),
-        st: {
-          ts: {
-            c: safeTextColor,
-            fs: textStyle.fontSize,
-            fw: textStyle.fontWeight,
-            ls: textStyle.letterSpacing,
-            sh: (safeShadow.offsetX === 0
-              && safeShadow.offsetY === 0
-              && safeShadow.blur === 0
-              && safeShadow.opacity === 0)
-              ? null
-              : {
-                  ox: safeShadow.offsetX,
-                  oy: safeShadow.offsetY,
-                  bl: safeShadow.blur,
-                  col: safeShadow.color,
-                  op: safeShadow.opacity / 100,
-                },
-            st: {
-              w: safeStroke.width,
-              col: safeStroke.color,
+      // 2. Get presigned URL
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const ext = contentType.split('/')[1];
+      const { url: presignedUrl, fields } = await getPresignedUrl({
+        file_name: `background-${ts}.${ext}`,
+        content_type: contentType,
+      });
+
+      // 3. Upload image via presigned POST
+      await uploadImage(presignedUrl, fields, bgBlob);
+      const file_url = `${presignedUrl}${fields.key}`;
+
+      // 4. Build payload
+      const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
+      const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
+      const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
+      const safePhotoStrokeColor = normalizeHex(photoStrokeColor, '#FFFFFF');
+      const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
+      const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
+
+      const raw_config: CompactTemplateJSON = {
+        ar: aspectRatioString,
+        t: isProfileTemplate,
+        pc: selectedTags,
+        lg: selectedLanguages,
+        bg: file_url,
+        mt: mediaType,
+        ip: {
+          x: Math.round((imageHolder.x / CANVAS_WIDTH) * 100),
+          y: Math.round((imageHolder.y / canvasHeight) * 100),
+          d: Math.round((imageHolder.diameter / CANVAS_WIDTH) * 100),
+          sh: photoShape,
+          ...(photoShape === 'square' ? { cr: photoCornerRadius } : {}),
+          hb: photoHasBackground,
+          sw: photoStrokeWidth,
+          sc: safePhotoStrokeColor,
+        },
+        np: {
+          x: Math.round((nameHolder.x / CANVAS_WIDTH) * 100),
+          y: Math.round((nameHolder.y / canvasHeight) * 100),
+          w: Math.round((nameHolder.width / CANVAS_WIDTH) * 100),
+          h: Math.round((nameHolder.height / canvasHeight) * 100),
+          st: {
+            ts: {
+              c: safeTextColor,
+              fs: textStyle.fontSize,
+              fw: textStyle.fontWeight,
+              ls: textStyle.letterSpacing,
+              sh: (safeShadow.offsetX === 0
+                && safeShadow.offsetY === 0
+                && safeShadow.blur === 0
+                && safeShadow.opacity === 0)
+                ? null
+                : {
+                    ox: safeShadow.offsetX,
+                    oy: safeShadow.offsetY,
+                    bl: safeShadow.blur,
+                    col: safeShadow.color,
+                    op: safeShadow.opacity / 100,
+                  },
+              st: {
+                w: safeStroke.width,
+                col: safeStroke.color,
+              },
+              ta: textStyle.textAlignment,
             },
-            ta: textStyle.textAlignment,
           },
         },
-      },
-    };
+      };
 
-    console.log('Export Payload (compact):', payload);
-    const jsonString = JSON.stringify(payload); // minified JSON (no whitespace)
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    link.download = `template-${ts}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    toast.success('Template exported!', { description: 'JSON saved to your device.' });
+      // 5. Create poster template and download response
+      const template = await createPosterTemplate({ title: `template-${ts}`, raw_config });
+
+      const jsonString = JSON.stringify(template);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `template-${ts}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Template exported!', { description: 'JSON saved to your device.' });
+    } catch (err) {
+      toast.error('Export failed', { description: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const currentStep = !backgroundImage
@@ -430,7 +473,9 @@ export default function App() {
 
   /* ================= LOGIN GATE ================= */
   if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} />;
+    return (
+      <Login onLogin={() => setIsLoggedIn(true)} />
+    );
   }
 
   /* ================= UI ================= */
@@ -478,7 +523,7 @@ export default function App() {
             {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </Button>
           <button
-            onClick={() => setIsLoggedIn(false)}
+            onClick={() => { clearToken(); setIsLoggedIn(false); }}
             className="text-sm font-semibold text-red-600"
           >
             Logout
@@ -535,23 +580,43 @@ export default function App() {
                   </div>
                 </div>
 
-                <TagSelector
-                  title={`${isProfileTemplate ? 'Self' : 'Wishes'} Tags`}
-                  availableTags={availableTags}
-                  selectedTags={selectedTags}
-                  onTagsChange={setSelectedTags}
-                  required
-                />
+                {categoriesError ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">{isProfileTemplate ? 'Self' : 'Wishes'} Tags</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-destructive">Something went wrong</span>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={fetchCategories}>Retry</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <TagSelector
+                    title={`${isProfileTemplate ? 'Self' : 'Wishes'} Tags`}
+                    availableTags={availableTags}
+                    selectedTags={selectedTags}
+                    onTagsChange={setSelectedTags}
+                    required
+                  />
+                )}
 
                 <Separator />
 
-                <TagSelector
-                  title="Language"
-                  availableTags={LANGUAGE_TAGS}
-                  selectedTags={selectedLanguages}
-                  onTagsChange={setSelectedLanguages}
-                  required
-                />
+                {languagesError ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Language</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-destructive">Something went wrong</span>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={fetchLanguages}>Retry</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <TagSelector
+                    title="Language"
+                    availableTags={languageTags}
+                    selectedTags={selectedLanguages}
+                    onTagsChange={setSelectedLanguages}
+                    required
+                  />
+                )}
               </div>
             </PanelSection>
 
@@ -566,6 +631,7 @@ export default function App() {
                 canvasWidth={CANVAS_WIDTH}
                 canvasHeight={canvasHeight}
                 onExport={handleExport}
+                isExporting={isExporting}
               />
             </PanelSection>
           </div>
