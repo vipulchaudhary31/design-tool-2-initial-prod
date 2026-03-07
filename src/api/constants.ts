@@ -1,5 +1,5 @@
 export const API_ENDPOINTS = {
-  LOGIN:           '/users/designer/login/',
+  LOGIN:           '/api-token-auth/',
   LANGUAGES:       '/poster-templates/languages/',
   CATEGORIES:      '/poster-templates/categories/',
   PRESIGNED_URL:   '/poster-templates/background-image/presigned-url/',
