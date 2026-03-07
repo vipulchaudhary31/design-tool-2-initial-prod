@@ -1,41 +1,31 @@
 import { useState } from "react";
 import {toast} from 'sonner';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
+import { login } from "@/api/login/login";
 
 interface LoginProps {
   onLogin: () => void;
 }
 
-// ✅ Hardcoded allowed users
-const ALLOWED_USERS = [
-  {
-    email: "hd.vishwas@getlokalapp.com",
-    password: "Lokal@1234",
-  },
-  {
-    email: "krishnakumar@getlokalapp.com",
-    password: "Lokal@51",
-  },
-];
-
-
 export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
-    const userExists = ALLOWED_USERS.some(
-      (user) => user.email === email && user.password === password
-    );
-
-    if (userExists) {
-      setError("");
-      toast.success("Login successful 🎉");
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      await login(email, password);
+      toast.success("Login successful");
       onLogin();
-    } else {
-      setError("Invalid email or password");
-      toast.error("Invalid email or password");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid email or password";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -95,9 +85,10 @@ export default function Login({ onLogin }: LoginProps) {
         {/* Login Button */}
         <button
           onClick={handleLogin}
-          className="w-full px-4 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 transition-all font-semibold text-white shadow-md"
+          disabled={isLoading}
+          className="w-full px-4 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 transition-all font-semibold text-white shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Sign in
+          {isLoading ? "Signing in…" : "Sign in"}
         </button>
 
         {/* Footer note */}
