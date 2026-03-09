@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+//TODO: Remove this and use the import.meta.env.VITE_API_BASE_URL
+const BASE = 'https://testapi.getlokalapp.com';
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'auth_token';
