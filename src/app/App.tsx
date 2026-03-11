@@ -378,7 +378,7 @@ export default function App() {
 
       // 3. Upload image via presigned POST
       await uploadImage(presignedUrl, fields, bgBlob);
-      const file_url = `${presignedUrl}${fields.key}`;
+      const file_url = fields.key;
 
       // 4. Build payload
       const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
