@@ -7,6 +7,8 @@ import react from '@vitejs/plugin-react'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  // GitHub Pages project site path
+  base: '/design-tool-2-initial-prod/',
   plugins: [
     react(),
     tailwindcss(),
