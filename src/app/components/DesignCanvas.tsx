@@ -4,12 +4,11 @@ import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
 import { circleToRect, nameToRect, computeDistances, KEYBOARD_STEP, KEYBOARD_SHIFT_STEP } from './snap-engine';
 import type { Rect, SnapGuide, DistanceIndicator } from './snap-engine';
-import { Eye, Pencil, Upload } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
+import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { isRasterBackgroundFile } from '@/utils/isRasterBackgroundFile';
 
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
 interface ImagePlaceholder { x: number; y: number; diameter: number; }
@@ -36,11 +35,12 @@ interface DesignCanvasProps {
   mediaType?: 'image' | 'video';
   textAlignment?: TextAlignment;
   letterSpacing?: number;
+  textFontFamily?: string;
   photoShape?: 'circle' | 'square';
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
-  onImageUpload?: (imageUrl: string, mediaType: 'image' | 'video') => void;
+  onImageUpload?: (imageUrl: string) => void;
   allowedCanvasSizes?: { height: number; label: string }[];
 }
 
@@ -75,6 +75,7 @@ export function DesignCanvas({
   mediaType = 'image',
   textAlignment = 'center',
   letterSpacing = 0,
+  textFontFamily = "'Noto Sans', 'Inter', sans-serif",
   photoShape = 'circle',
   photoCornerRadius = 16,
   photoStrokeWidth = 0,
@@ -83,7 +84,6 @@ export function DesignCanvas({
   allowedCanvasSizes,
 }: DesignCanvasProps) {
   const [scale, setScale] = useState(1);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | null>(null);
   const [activeGuides, setActiveGuides] = useState<SnapGuide[]>([]);
   const [dragRect, setDragRect] = useState<Rect | null>(null);
@@ -169,8 +169,6 @@ export function DesignCanvas({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []); // Stable — reads from refs
 
-  const previewPhoto = userPhoto || samplePhoto;
-
   const scaledCombinedShadow = buildCombinedTextShadow(
     { ...textShadow, offsetX: textShadow.offsetX * scale, offsetY: textShadow.offsetY * scale, blur: textShadow.blur * scale },
     { ...textStroke, width: textStroke.width * scale },
@@ -208,26 +206,69 @@ export function DesignCanvas({
     return computeDistances(dragRect, others, canvasWidth, canvasHeight);
   }, [dragRect, selectedLayer, textRect, imageRect, canvasWidth, canvasHeight]);
 
-  // ── Deselect when clicking canvas background ──
-  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === canvasRef.current) {
+  const maxNameRectHeight = Math.round(canvasHeight * 0.12);
+  // Minimum: enough room for one line of the largest expected script (× 1.5) + stroke + shadow + padding.
+  // This is only a drag floor; actual auto-height from App.tsx uses real DOM measurement.
+  const shadowY = Math.abs(textShadow.offsetY) + textShadow.blur;
+  const minNameRectHeight = Math.min(
+    Math.ceil(fontSize * 1.5 + textStroke.width * 2 + shadowY) + 24,
+    maxNameRectHeight,
+  );
+
+  // ── Deselect when clicking empty canvas (not on a layer) ──
+  const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!backgroundImage) return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    // Layer hits bubble from inner elements (img/text) up to the layer root.
+    if (target.closest('[data-design-layer]')) return;
+    setSelectedLayer(null);
+    setActiveGuides([]);
+    setDragRect(null);
+  }, [backgroundImage]);
+
+  // Clicking chrome outside the canvas (side panels/header/etc.) should also clear selection.
+  useEffect(() => {
+    if (!backgroundImage || !selectedLayer) return;
+
+    const onPointerDownCapture = (e: PointerEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+
+      // Canvas empty-area clicks are handled by `handleCanvasPointerDown` (bubble on canvasRef).
+      if (canvasRef.current?.contains(target)) return;
+
+      // Still interacting with a layer (photo/text) even if portaled — don't clear.
+      if (target.closest('[data-design-layer]')) return;
+
       setSelectedLayer(null);
-    }
-  }, []);
+      setActiveGuides([]);
+      setDragRect(null);
+    };
+
+    window.addEventListener('pointerdown', onPointerDownCapture, true);
+    return () => window.removeEventListener('pointerdown', onPointerDownCapture, true);
+  }, [backgroundImage, selectedLayer]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!isRasterBackgroundFile(file)) {
+      toast.error('Unsupported file format', {
+        description: 'Only JPEG, PNG, or WebP images are allowed.',
+      });
+      event.target.value = '';
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast.error('Image size exceeds the maximum limit of 15MB.');
+      event.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onloadend = () => {
       const imageUrl = reader.result as string;
-      if (file.type.startsWith('image/')) {
-        if (file.size > MAX_IMAGE_SIZE) { toast.error('Image size exceeds the maximum limit of 15MB.'); return; }
-        onImageUpload?.(imageUrl, 'image');
-      } else if (file.type.startsWith('video/')) {
-        if (file.size > MAX_VIDEO_SIZE) { toast.error('Video size exceeds the maximum limit of 50MB.'); return; }
-        onImageUpload?.(imageUrl, 'video');
-      }
+      onImageUpload?.(imageUrl);
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -343,31 +384,9 @@ export function DesignCanvas({
 
   return (
     <div ref={containerRef} className="flex flex-col items-center w-full outline-none">
-      {/* Mode toggle */}
-      {backgroundImage && (
-        <div className="mb-3 flex items-center gap-1">
-          <Button
-            variant={!isPreviewMode ? 'default' : 'outline'}
-            size="sm"
-            className="gap-1.5 h-7 text-xs"
-            onClick={() => setIsPreviewMode(false)}
-          >
-            <Pencil className="w-3 h-3" /> Editor
-          </Button>
-          <Button
-            variant={isPreviewMode ? 'default' : 'outline'}
-            size="sm"
-            className="gap-1.5 h-7 text-xs"
-            onClick={() => setIsPreviewMode(true)}
-          >
-            <Eye className="w-3 h-3" /> Preview
-          </Button>
-        </div>
-      )}
-
       <div
         ref={canvasRef}
-        onClick={handleCanvasClick}
+        onPointerDown={handleCanvasPointerDown}
         className="relative rounded-md"
         style={{
           width: canvasWidth * scale,
@@ -388,7 +407,12 @@ export function DesignCanvas({
         </div>
         {!backgroundImage && (
           <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group">
-            <input type="file" accept="image/*,video/*" className="hidden" onChange={handleImageUpload} />
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.jfif,.png,.webp,image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleImageUpload}
+            />
             <div className="flex flex-col items-center gap-2.5">
               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                 <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -398,8 +422,7 @@ export function DesignCanvas({
           </label>
         )}
 
-        {/* ── EDITOR ── */}
-        {!isPreviewMode && backgroundImage && (
+        {backgroundImage && (
           <>
             <DraggablePlaceholder
               type="circle"
@@ -410,7 +433,9 @@ export function DesignCanvas({
               onResizeDiameter={(d) => onImageHolderChange({ ...imageHolder, diameter: d })}
               onCircleChange={(x, y, d) => onImageHolderChange({ x, y, diameter: d })}
               minDiameter={300} maxDiameter={900}
-              userPhoto={userPhoto} photoShape={photoShape} photoCornerRadius={photoCornerRadius}
+              userPhoto={userPhoto}
+              samplePhoto={samplePhoto}
+              photoShape={photoShape} photoCornerRadius={photoCornerRadius}
               photoStrokeWidth={photoStrokeWidth} photoStrokeColor={photoStrokeColor}
               isSelected={selectedLayer === 'image'}
               onSelect={() => setSelectedLayer('image')}
@@ -427,8 +452,8 @@ export function DesignCanvas({
               onDrag={(x, y) => onNameHolderChange({ ...nameHolder, x, y })}
               onRectChange={(x, y, w, h) => onNameHolderChange({ x, y, width: w, height: h })}
               minRectWidth={Math.round(canvasWidth * 0.50)} maxRectWidth={canvasWidth}
-              minRectHeight={fontSize + 24} maxRectHeight={Math.round(canvasHeight * 0.12)}
-              textAlignment={textAlignment} letterSpacing={letterSpacing}
+              minRectHeight={minNameRectHeight} maxRectHeight={maxNameRectHeight}
+              textAlignment={textAlignment} letterSpacing={letterSpacing} textFontFamily={textFontFamily}
               isSelected={selectedLayer === 'text'}
               onSelect={() => setSelectedLayer('text')}
               otherRects={otherRectsForText}
@@ -438,53 +463,6 @@ export function DesignCanvas({
 
             {/* Snap guide + distance overlay */}
             {renderOverlay()}
-          </>
-        )}
-
-        {/* ── PREVIEW ── */}
-        {isPreviewMode && backgroundImage && (
-          <>
-            <div className="absolute" style={{ left: imageHolder.x * scale, top: imageHolder.y * scale }}>
-              <div className="overflow-hidden" style={{
-                width: imageHolder.diameter * scale, height: imageHolder.diameter * scale,
-                borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * scale}px`,
-                borderWidth: photoStrokeWidth > 0 ? photoStrokeWidth * scale : undefined,
-                borderColor: photoStrokeWidth > 0 ? photoStrokeColor : undefined,
-                borderStyle: photoStrokeWidth > 0 ? 'solid' : undefined,
-                boxSizing: 'border-box',
-              }}>
-                {previewPhoto ? (
-                  <img src={previewPhoto} alt="User" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-white/30 flex items-center justify-center">
-                    <span className="text-white text-xs">Photo</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="absolute" style={{
-              left: nameHolder.x * scale, top: nameHolder.y * scale,
-              width: nameHolder.width * scale, height: nameHolder.height * scale,
-            }}>
-              <div className="relative w-full h-full flex items-center" style={{
-                padding: `${12 * scale}px ${scaledPad + 6}px`,
-                justifyContent: textAlignment === 'left' ? 'flex-start' : textAlignment === 'right' ? 'flex-end' : 'center',
-              }}>
-                <span className="relative z-10" style={{
-                  fontFamily: "'Noto Sans', sans-serif",
-                  color: textColor, fontWeight, fontSize: fontSize * scale, lineHeight: 1,
-                  textShadow: scaledCombinedShadow, textAlign: textAlignment,
-                  maxWidth: '100%', whiteSpace: 'nowrap', display: 'block',
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                  letterSpacing: `${letterSpacing * scale}px`,
-                  WebkitFontSmoothing: 'antialiased' as any,
-                  MozOsxFontSmoothing: 'grayscale' as any,
-                  textRendering: 'optimizeLegibility',
-                }}>
-                  {userName}
-                </span>
-              </div>
-            </div>
           </>
         )}
       </div>

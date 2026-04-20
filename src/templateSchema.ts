@@ -13,6 +13,8 @@ export type CompactTemplateJSON = {
   lg: string[];
   /** backgroundImage (data URL) or null */
   bg: string | null;
+  /** dominantColorHex from background image (e.g. "#E84393") */
+  dc: string | null;
   /** mediaType: "image" | "video" */
   mt: 'image' | 'video';
   /** Image (photo) placeholder */
@@ -94,6 +96,7 @@ export const TEMPLATE_KEY_MAP = {
   pc: 'primaryCategories',
   lg: 'languageTags',
   bg: 'backgroundImage',
+  dc: 'dominantColorHex',
   mt: 'mediaType',
   ip: 'imagePlaceholder',
   np: 'namePlaceholder',

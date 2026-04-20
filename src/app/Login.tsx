@@ -1,28 +1,49 @@
-import { useState } from "react";
-import {toast} from 'sonner';
+import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import { login } from "@/api/login/login";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 interface LoginProps {
   onLogin: () => void;
+  isDarkMode: boolean;
+  onThemeToggle: (next: boolean) => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, isDarkMode, onThemeToggle }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [authError, setAuthError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isLoading) return;
+
+    const normalizedEmail = email.trim();
+    const nextEmailError = normalizedEmail ? "" : "Email is required.";
+    const nextPasswordError = password ? "" : "Password is required.";
+
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    setAuthError("");
+    if (nextEmailError || nextPasswordError) {
+      return;
+    }
+
     setIsLoading(true);
-    setError("");
     try {
-      await login(email, password);
+      await login(normalizedEmail, password);
       toast.success("Login successful");
       onLogin();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid email or password";
-      setError(message);
+      setAuthError(message);
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -30,71 +51,95 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-100">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-6">
+    <div className="relative flex-1 flex items-center justify-center bg-background text-foreground px-4 py-10">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle isDarkMode={isDarkMode} onToggle={onThemeToggle} />
+      </div>
+
+      <div className="w-full max-w-sm rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+        <div className="flex flex-col items-center text-center gap-2 px-8 pt-8 pb-6">
           <img
             src={lokalLogo}
             alt="Lokal"
-            className="h-14 w-14 rounded-xl mb-3"
+            className="h-14 w-14 rounded-lg mb-2 select-none"
           />
-          <h1 className="text-2xl font-bold text-gray-900">
-            Template Studio
-          </h1>
-          <p className="text-sm text-gray-600 mt-1 text-center">
+          <h1 className="text-xl font-semibold tracking-tight">Template Studio</h1>
+          <p className="text-xs text-muted-foreground">
             Internal design tool for Lokal team
           </p>
         </div>
 
-        {/* Email */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@getlokalapp.com"
-            className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-orange-400 focus:outline-none"
-          />
-        </div>
+        <form onSubmit={handleSubmit} noValidate className="px-8 pb-8">
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="login-email" className="text-xs text-muted-foreground">
+                Email
+              </Label>
+              <Input
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError("");
+                  if (authError) setAuthError("");
+                }}
+                placeholder="you@getlokalapp.com"
+                aria-invalid={!!emailError || undefined}
+                disabled={isLoading}
+              />
+              {emailError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {emailError}
+                </p>
+              )}
+            </div>
 
-        {/* Password */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Password
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter password"
-            className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-orange-400 focus:outline-none"
-          />
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="login-password" className="text-xs text-muted-foreground">
+                Password
+              </Label>
+              <Input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError("");
+                  if (authError) setAuthError("");
+                }}
+                placeholder="Enter password"
+                aria-invalid={!!passwordError || undefined}
+                disabled={isLoading}
+              />
+              {passwordError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {passwordError}
+                </p>
+              )}
+            </div>
 
-        {/* Error text (optional, toast already shows it) */}
-        {error && (
-          <p className="text-sm text-red-500 mb-3 text-center">
-            {error}
+            {authError && (
+              <p role="alert" className="text-xs text-destructive text-center">
+                {authError}
+              </p>
+            )}
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full mt-5"
+            disabled={isLoading}
+          >
+            {isLoading ? "Signing in…" : "Sign in"}
+          </Button>
+
+          <p className="text-[11px] text-muted-foreground text-center mt-4">
+            Access restricted to approved Lokal team members
           </p>
-        )}
-
-        {/* Login Button */}
-        <button
-          onClick={handleLogin}
-          disabled={isLoading}
-          className="w-full px-4 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 transition-all font-semibold text-white shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {isLoading ? "Signing in…" : "Sign in"}
-        </button>
-
-        {/* Footer note */}
-        <p className="text-xs text-gray-500 text-center mt-6">
-          Access restricted to approved Lokal team members
-        </p>
+        </form>
       </div>
     </div>
   );

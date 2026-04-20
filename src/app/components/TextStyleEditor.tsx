@@ -131,6 +131,68 @@ export function buildCombinedTextShadow(shadow: TextShadow, stroke: TextStroke):
   return parts.length > 0 ? parts.join(', ') : 'none';
 }
 
+/**
+ * Choose preview font family by input script:
+ * - English/Latin text -> Inter
+ * - Any non-Latin script (Hindi/Telugu/Tamil/etc.) -> Noto Sans
+ */
+export function getNameFontFamilyForLabel(label: string): string {
+  const letterMatches = label.match(/\p{L}/gu);
+  if (!letterMatches || letterMatches.length === 0) {
+    return "'Inter', 'Noto Sans', sans-serif";
+  }
+  const hasOnlyLatinLetters = letterMatches.every((ch) => /\p{Script=Latin}/u.test(ch));
+  return hasOnlyLatinLetters
+    ? "'Inter', 'Noto Sans', sans-serif"
+    : "'Noto Sans', 'Inter', sans-serif";
+}
+
+/**
+ * Measure actual rendered line height for a given font family at size/weight.
+ * Uses hidden DOM after fonts are ready so auto-height works for Latin + vernacular scripts.
+ */
+export async function measureLineHeight(
+  fontSize: number,
+  fontWeight: number,
+  fontFamily: string,
+): Promise<number> {
+  // Wait for the webfont so measurement reflects the real glyphs
+  if (document.fonts?.ready) await document.fonts.ready;
+  const el = document.createElement('div');
+  el.style.cssText = [
+    'position:fixed', 'top:-9999px', 'left:-9999px', 'visibility:hidden',
+    `font-family:${fontFamily}`,
+    `font-size:${fontSize}px`,
+    `font-weight:${fontWeight}`,
+    'line-height:normal',
+    'white-space:nowrap',
+    'padding:0', 'margin:0', 'border:none',
+  ].join(';');
+  // Include Latin + Devanagari marks so the measured line-box is safe for both classes.
+  el.textContent = 'Xg\u0915\u093F';
+  document.body.appendChild(el);
+  const h = el.getBoundingClientRect().height;
+  document.body.removeChild(el);
+  return h > 0 ? h : fontSize * 1.4; // safe fallback if DOM measurement fails
+}
+
+/**
+ * Full name placeholder height given a measured line height:
+ * line body + stroke overflow + shadow overflow + 24 px vertical padding (12+12),
+ * capped at maxCanvasFraction of the canvas height.
+ */
+export function computeNamePlaceholderAutoHeight(
+  measuredLineHeight: number,
+  textStroke: TextStroke,
+  textShadow: TextShadow,
+  canvasHeight: number,
+  maxCanvasFraction = 0.12,
+): number {
+  const shadowY = Math.abs(textShadow.offsetY) + textShadow.blur;
+  const inner = Math.ceil(measuredLineHeight + textStroke.width * 2 + shadowY);
+  return Math.min(inner + 24, Math.round(canvasHeight * maxCanvasFraction));
+}
+
 // ─── Presets ──────────────────────────────────────────────────────────
 
 const SHADOW_PRESETS: { label: string; shadow: TextShadow }[] = [

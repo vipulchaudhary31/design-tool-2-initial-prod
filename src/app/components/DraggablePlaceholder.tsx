@@ -32,10 +32,13 @@ interface DraggablePlaceholderProps {
   textShadow?: TextShadow;
   textStroke?: TextStroke;
   userPhoto?: string | null;
+  /** Fallback preview image when `userPhoto` is not set (matches canvas preview behaviour). */
+  samplePhoto?: string | null;
   canvasWidth: number;
   canvasHeight: number;
   textAlignment?: TextAlignment;
   letterSpacing?: number;
+  textFontFamily?: string;
   photoShape?: 'circle' | 'square';
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
@@ -79,6 +82,14 @@ function isEdgeHandle(c: Corner): c is 't' | 'b' | 'l' | 'r' {
   return c === 't' || c === 'b' || c === 'l' || c === 'r';
 }
 
+/** Map a circle edge handle to a diagonal corner key understood by `computeResizeSnap`. */
+function circleSnapCornerForEdge(edge: 't' | 'b' | 'l' | 'r'): 'tl' | 'tr' | 'bl' | 'br' {
+  if (edge === 't') return 'tr';
+  if (edge === 'b') return 'br';
+  if (edge === 'l') return 'bl';
+  return 'br';
+}
+
 function cornerCursor(c: Corner): string {
   if (c === 'tl' || c === 'br') return 'nwse-resize';
   if (c === 'tr' || c === 'bl') return 'nesw-resize';
@@ -111,10 +122,12 @@ export function DraggablePlaceholder({
   textShadow = { offsetX: 0, offsetY: 0, blur: 0, color: '#000000', opacity: 0 },
   textStroke = { width: 0, color: '#000000' },
   userPhoto = null,
+  samplePhoto = null,
   canvasWidth,
   canvasHeight,
   textAlignment = 'center',
   letterSpacing = 0,
+  textFontFamily = "'Noto Sans', 'Inter', sans-serif",
   photoShape = 'circle',
   photoCornerRadius = 16,
   photoStrokeWidth = 0,
@@ -126,6 +139,7 @@ export function DraggablePlaceholder({
   onDragRect,
 }: DraggablePlaceholderProps) {
   const safeScale = canvasScale || 1;
+  const previewPhoto = userPhoto || samplePhoto;
 
   // ── shared visual state ──
   const [hoveredCorner, setHoveredCorner] = useState<Corner>(null);
@@ -212,7 +226,6 @@ export function DraggablePlaceholder({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       onSelect?.();
 
       const el = containerRef.current;
@@ -223,9 +236,10 @@ export function DraggablePlaceholder({
       const localX = e.clientX - rect.left;
       const localY = e.clientY - rect.top;
       const detectedCorner = getCorner(localX, localY, rect.width, rect.height);
-      // Circles only use the 4 diagonal corners (edge handles don't apply to uniform resize)
-      const cornerCircle = (type === 'circle' && onResizeDiameter && detectedCorner && !isEdgeHandle(detectedCorner))
-        ? detectedCorner : null;
+      const cornerCircle =
+        type === 'circle' && onResizeDiameter && detectedCorner
+          ? detectedCorner
+          : null;
       const cornerRect = (type === 'rectangle' && onRectChange)
         ? detectedCorner : null;
       const corner = cornerCircle ?? cornerRect;
@@ -257,9 +271,7 @@ export function DraggablePlaceholder({
         if (containerRef.current && (type === 'circle' && onResizeDiameter || type === 'rectangle' && onRectChange)) {
           const rect = containerRef.current.getBoundingClientRect();
           const detected = getCorner(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
-          // Circles: ignore edge handles for hover cursor
-          const hovered = (type === 'circle' && detected && isEdgeHandle(detected)) ? null : detected;
-          setHoveredCorner(hovered);
+          setHoveredCorner(detected);
         }
         return;
       }
@@ -282,35 +294,54 @@ export function DraggablePlaceholder({
           onDragRect?.(circleToRect(finalClamped.x, finalClamped.y, ps.startDiameter));
         } else {
           // ── Resize with center-snap ──
-          let delta: number;
-          if (ps.corner === 'br') delta = Math.max(dx, dy);
-          else if (ps.corner === 'bl') delta = Math.max(-dx, dy);
-          else if (ps.corner === 'tr') delta = Math.max(dx, -dy);
-          else delta = Math.max(-dx, -dy);
-
-          const newD = clampDiameter(ps.startDiameter + delta);
-          const actualDelta = newD - ps.startDiameter;
+          const c = ps.corner;
+          let newD: number;
           let newX = ps.startX;
           let newY = ps.startY;
-          if (ps.corner === 'tl') { newX -= actualDelta; newY -= actualDelta; }
-          else if (ps.corner === 'tr') { newY -= actualDelta; }
-          else if (ps.corner === 'bl') { newX -= actualDelta; }
+
+          if (isEdgeHandle(c)) {
+            const edge = c;
+            if (edge === 't') {
+              newD = clampDiameter(ps.startDiameter - 2 * dy);
+              newY = ps.startY + ps.startDiameter - newD;
+            } else if (edge === 'b') {
+              newD = clampDiameter(ps.startDiameter + 2 * dy);
+            } else if (edge === 'l') {
+              newD = clampDiameter(ps.startDiameter - 2 * dx);
+              newX = ps.startX + ps.startDiameter - newD;
+            } else {
+              newD = clampDiameter(ps.startDiameter + 2 * dx);
+            }
+          } else {
+            let delta: number;
+            if (c === 'br') delta = Math.max(dx, dy);
+            else if (c === 'bl') delta = Math.max(-dx, dy);
+            else if (c === 'tr') delta = Math.max(dx, -dy);
+            else delta = Math.max(-dx, -dy);
+
+            newD = clampDiameter(ps.startDiameter + delta);
+            const actualDelta = newD - ps.startDiameter;
+            if (c === 'tl') { newX -= actualDelta; newY -= actualDelta; }
+            else if (c === 'tr') { newY -= actualDelta; }
+            else if (c === 'bl') { newX -= actualDelta; }
+          }
 
           const clamped = clampCirclePos(newX, newY, newD);
 
           // Anchor is the FIXED corner throughout the resize gesture
           // 'br'/'tr' → left edge is fixed, 'tl'/'bl' → right edge is fixed
-          const anchorX = (ps.corner === 'br' || ps.corner === 'tr')
+          const snapCorner = isEdgeHandle(c) ? circleSnapCornerForEdge(c) : (c as 'tl' | 'tr' | 'bl' | 'br');
+          const anchorX = (snapCorner === 'br' || snapCorner === 'tr')
             ? ps.startX
             : ps.startX + ps.startDiameter;
           // 'br'/'bl' → top edge is fixed, 'tl'/'tr' → bottom edge is fixed
-          const anchorY = (ps.corner === 'br' || ps.corner === 'bl')
+          const anchorY = (snapCorner === 'br' || snapCorner === 'bl')
             ? ps.startY
             : ps.startY + ps.startDiameter;
 
           const resizeSnap = computeResizeSnap(
             clamped.x, clamped.y, newD,
-            ps.corner as 'tl' | 'tr' | 'bl' | 'br',
+            snapCorner,
             anchorX, anchorY,
             otherRects, canvasWidth, canvasHeight,
             minDiameter, maxDiameter,
@@ -470,6 +501,7 @@ export function DraggablePlaceholder({
     return (
       <div
         ref={containerRef}
+        data-design-layer="image"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -492,13 +524,13 @@ export function DraggablePlaceholder({
             border: photoStrokeWidth > 0 ? `${photoStrokeWidth * safeScale}px solid ${photoStrokeColor}` : 'none',
             borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
             boxSizing: 'border-box',
-            backgroundColor: userPhoto
+            backgroundColor: previewPhoto
               ? 'transparent'
               : interacting ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)',
           }}
         >
-          {userPhoto ? (
-            <img src={userPhoto} alt="User Photo" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+          {previewPhoto ? (
+            <img src={previewPhoto} alt="User Photo" className="w-full h-full object-cover pointer-events-none" draggable={false} />
           ) : (
             <div className="text-muted-foreground text-xs px-3 py-1.5 rounded-full text-center pointer-events-none">
               {label}
@@ -538,6 +570,39 @@ export function DraggablePlaceholder({
               );
             })}
 
+            {/* Edge-midpoint handles (same pill style as the text box) */}
+            {(['t', 'b', 'l', 'r'] as const).map((edge) => {
+              const isH = edge === 't' || edge === 'b';
+              const isActive = hoveredCorner === edge || isResizing;
+              return (
+                <div
+                  key={edge}
+                  className={`absolute z-20 transition-all duration-150 ${
+                    isActive || interacting
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  style={{
+                    top:       edge === 't' ? -4  : edge === 'b' ? undefined : '50%',
+                    bottom:    edge === 'b' ? -4  : undefined,
+                    left:      edge === 'l' ? -4  : edge === 'r' ? undefined : '50%',
+                    right:     edge === 'r' ? -4  : undefined,
+                    transform: isH ? 'translateX(-50%)' : 'translateY(-50%)',
+                    width:  isH ? 28 : 6,
+                    height: isH ? 6  : 28,
+                    borderRadius: 3,
+                    background: hoveredCorner === edge
+                      ? 'oklch(0.768 0.1305 223.2)'
+                      : 'white',
+                    border: `1.5px solid ${hoveredCorner === edge ? 'oklch(0.768 0.1305 223.2)' : 'oklch(0.5 0.12 223)'}`,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                    pointerEvents: 'none',
+                    transition: 'all 100ms ease',
+                  }}
+                />
+              );
+            })}
+
             {/* Size badge during resize */}
             {isResizing && (
               <div
@@ -562,7 +627,7 @@ export function DraggablePlaceholder({
             borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
             boxShadow: isSelected || interacting
               ? `0 0 0 2px oklch(0.768 0.1305 223.2 / 0.9)`
-              : `0 0 0 1px rgba(150, 150, 150, 0.3)`,
+              : 'none',
           }}
         />
       </div>
@@ -578,6 +643,7 @@ export function DraggablePlaceholder({
   return (
     <div
       ref={containerRef}
+      data-design-layer="text"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -670,51 +736,48 @@ export function DraggablePlaceholder({
           )}
         </>
       )}
-      <div className="relative w-full h-full">
-        <div
-          className={`w-full h-full transition-all`}
+      {/* Selection ring — sits on the outer box, text can overflow visually */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-all duration-150"
+        style={{
+          boxShadow: isSelected || interacting
+            ? '0 0 0 1.5px oklch(0.768 0.1305 223.2 / 0.8)'
+            : 'none',
+        }}
+      />
+      {/* Text Content — vertically centred, not clipped (overflow:visible so stroke/shadow show) */}
+      <div
+        className="absolute inset-0 flex items-center"
+        style={{
+          padding: `${12 * safeScale}px ${scaledPad + 6}px`,
+          justifyContent:
+            textAlignment === 'left' ? 'flex-start'
+            : textAlignment === 'right' ? 'flex-end'
+            : 'center',
+          overflow: 'visible',
+        }}
+      >
+        <span
+          className="relative z-10"
           style={{
-            boxShadow: isSelected || interacting
-              ? '0 0 0 1.5px oklch(0.768 0.1305 223.2 / 0.8)'
-              : 'none',
+            fontFamily: textFontFamily,
+            color: textColor,
+            fontWeight: fontWeight,
+            fontSize: fontSize * safeScale,
+            lineHeight: 'normal',
+            textShadow: scaledCombinedShadow,
+            textAlign: textAlignment,
+            whiteSpace: 'nowrap',
+            display: 'block',
+            overflow: 'visible',
+            letterSpacing: `${letterSpacing * safeScale}px`,
+            WebkitFontSmoothing: 'antialiased' as any,
+            MozOsxFontSmoothing: 'grayscale' as any,
+            textRendering: 'optimizeLegibility',
           }}
         >
-          {/* Text Content */}
-          <div
-            className="relative w-full h-full flex items-center"
-            style={{
-              padding: `${12 * safeScale}px ${scaledPad + 6}px`,
-              justifyContent:
-                textAlignment === 'left' ? 'flex-start'
-                : textAlignment === 'right' ? 'flex-end'
-                : 'center',
-            }}
-          >
-            <span
-              className="relative z-10"
-              style={{
-                fontFamily: "'Noto Sans', sans-serif",
-                color: textColor,
-                fontWeight: fontWeight,
-                fontSize: fontSize * safeScale,
-                lineHeight: 1,
-                textShadow: scaledCombinedShadow,
-                textAlign: textAlignment,
-                maxWidth: '100%',
-                whiteSpace: 'nowrap',
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                letterSpacing: `${letterSpacing * safeScale}px`,
-                WebkitFontSmoothing: 'antialiased' as any,
-                MozOsxFontSmoothing: 'grayscale' as any,
-                textRendering: 'optimizeLegibility',
-              }}
-            >
-              {label}
-            </span>
-          </div>
-        </div>
+          {label}
+        </span>
       </div>
     </div>
   );

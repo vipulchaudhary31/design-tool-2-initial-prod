@@ -246,6 +246,7 @@ Before export, the tool validates:
   "occasionTags": ["Good Morning", "Christmas"],
   "languageTags": ["English", "Hindi"],
   "backgroundImage": "data:image/jpeg;base64,...",
+  "dominantColorHex": "#E84393",
   "imagePlaceholder": {
     "x": 44.44,  // percentage of canvas width
     "y": 13.89,  // percentage of canvas height
@@ -666,6 +667,7 @@ const canvasY = (percentY / 100) * canvasHeight;
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.1 | Apr 19, 2026 | Engineering | Documented dominant color hex (`dc` / `dominantColorHex`) in export payload; added dedicated `TEMPLATE_JSON_SCHEMA.md` contract doc |
 | 1.0 | Jan 16, 2026 | Product Team | Initial release with all core features |
 
 ---

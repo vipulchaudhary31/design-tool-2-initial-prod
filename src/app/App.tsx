@@ -2,15 +2,25 @@
 // Use BASE_URL so assets work on GitHub Pages (e.g. /Lokalposterstudio/)
 const baseUrl = import.meta.env.BASE_URL;
 const image_c92d52e8598ae346d604fac2120bd87eab98c2a9 = `${baseUrl}placeholder-logo.png`;
-const samplePhotoBg = `${baseUrl}placeholder-sample-bg.png`;
-const samplePhotoNoBg = `${baseUrl}placeholder-sample-nobg.png`;
+const samplePhotoBg = `${baseUrl}assets/sample-photo-bg.png`;
+const samplePhotoNoBg = `${baseUrl}assets/sample-photo-nobg.png`;
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { flushSync } from 'react-dom';
 import { ImageUploader } from '@/app/components/ImageUploader';
+import { ThemeToggle } from '@/app/components/ThemeToggle';
 import { DesignCanvas } from '@/app/components/DesignCanvas';
 import { TagSelector } from '@/app/components/TagSelector';
-import { TextStyleEditor, type TextStyle, textShadowToRN, textStrokeToRNShadows, normalizeHex } from '@/app/components/TextStyleEditor';
+import {
+  TextStyleEditor,
+  type TextStyle,
+  hexToRgba,
+  textStrokeToRNShadows,
+  normalizeHex,
+  computeNamePlaceholderAutoHeight,
+  measureLineHeight,
+  getNameFontFamilyForLabel,
+} from '@/app/components/TextStyleEditor';
 import { ExportPanel } from '@/app/components/ExportPanel';
+import { getColor } from 'colorthief';
 import { Toaster } from '@/app/components/ui/sonner';
 import { toast } from 'sonner';
 import { Button } from '@/app/components/ui/button';
@@ -20,6 +30,7 @@ import { Switch } from '@/app/components/ui/switch';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/app/components/ui/collapsible';
+import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import { LsdEasterEgg, LsdCredit } from '@/app/components/LsdEasterEgg';
 import type { CompactTemplateJSON } from '@/templateSchema';
 import Login from '@/app/Login';
@@ -29,12 +40,12 @@ import { getCategories } from '@/api/categories/categories';
 import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
-import type { ImageContentType } from '@/api/get-presigned-url/types';
+import { extensionForRasterContentType, normalizeRasterUploadContentType } from '@/utils/isRasterBackgroundFile';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
   Upload, Tags, Download, User, Circle, Square,
-  ChevronRight, ImageIcon, X, Palette, Sun, Moon,
-  SlidersHorizontal,
+  ChevronRight, ImageIcon, X, Palette,
+  SlidersHorizontal, AlertCircle, LogOut,
 } from 'lucide-react';
 
 interface ImagePlaceholder {
@@ -174,7 +185,6 @@ export default function App() {
 
   /* ================= DESIGN STATE ================= */
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isProfileTemplate, setIsProfileTemplate] = useState<boolean>(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -187,6 +197,9 @@ export default function App() {
   const [photoStrokeWidth, setPhotoStrokeWidth] = useState<number>(0);
   const [photoStrokeColor, setPhotoStrokeColor] = useState<string>('#FFFFFF');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [dominantColorHex, setDominantColorHex] = useState<string | null>(null);
+  const [dominantColorCopied, setDominantColorCopied] = useState<boolean>(false);
+  const nameFontFamily = getNameFontFamilyForLabel(userName);
 
   /* ── Fetch tag data whenever logged in (covers refresh with existing token) ── */
   useEffect(() => {
@@ -224,53 +237,6 @@ export default function App() {
     }
   }, []);
 
-  const themeToggleRef = useRef<HTMLButtonElement>(null);
-
-  const toggleTheme = useCallback(() => {
-    const btn = themeToggleRef.current;
-
-    // Fallback: no View Transitions API support
-    if (!btn || !document.startViewTransition) {
-      setIsDarkMode(prev => !prev);
-      return;
-    }
-
-    // Get the center of the button for the circle origin
-    const rect = btn.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
-
-    // Max radius to cover the entire viewport from that point
-    const maxRadius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y),
-    );
-
-    // Start the view transition — flushSync ensures React updates the DOM synchronously
-    const transition = document.startViewTransition(() => {
-      flushSync(() => {
-        setIsDarkMode(prev => !prev);
-      });
-    });
-
-    // Animate the new snapshot with an expanding circle clip-path
-    transition.ready.then(() => {
-      document.documentElement.animate(
-        {
-          clipPath: [
-            `circle(0px at ${x}px ${y}px)`,
-            `circle(${maxRadius}px at ${x}px ${y}px)`,
-          ],
-        },
-        {
-          duration: 500,
-          easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-          pseudoElement: '::view-transition-new(root)',
-        },
-      );
-    });
-  }, []);
-
   const [textStyle, setTextStyle] = useState<TextStyle>({
     color: '#FFFFFF',
     fontSize: 48,
@@ -289,8 +255,8 @@ export default function App() {
     ? computeAspectRatioString(imageDimensions.width, imageDimensions.height)
     : '';
 
-  const handleImageUpload = (imageUrl: string, type: 'image' | 'video') => {
-    const validateAndSet = (srcWidth: number, srcHeight: number, mt: 'image' | 'video') => {
+  const handleImageUpload = (imageUrl: string) => {
+    const validateAndSet = (srcWidth: number, srcHeight: number) => {
       const normalizedHeight = Math.round((CANVAS_WIDTH / srcWidth) * srcHeight);
       const matched = ALLOWED_CANVAS_SIZES.find(
         size => Math.abs(normalizedHeight - size.height) <= 5
@@ -303,22 +269,41 @@ export default function App() {
       }
       setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
       setBackgroundImage(imageUrl);
-      setMediaType(mt);
     };
-    if (type === 'video') {
-      const video = document.createElement('video');
-      video.onloadedmetadata = () => validateAndSet(video.videoWidth, video.videoHeight, 'video');
-      video.src = imageUrl;
-    } else {
-      const img = new window.Image();
-      img.onload = () => validateAndSet(img.naturalWidth, img.naturalHeight, 'image');
-      img.src = imageUrl;
-    }
+    const img = new window.Image();
+    img.onload = () => validateAndSet(img.naturalWidth, img.naturalHeight);
+    img.src = imageUrl;
   };
 
   const availableTags = isProfileTemplate ? profileTags : uploadTags;
 
   useEffect(() => { setSelectedTags([]); }, [isProfileTemplate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const extractDominant = async () => {
+      if (!backgroundImage) {
+        setDominantColorHex(null);
+        return;
+      }
+      try {
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Could not load image for color extraction.'));
+          img.src = backgroundImage;
+        });
+        const color = await getColor(img, { quality: 10, ignoreWhite: false });
+        const hex = color?.hex?.()?.toUpperCase?.() ?? null;
+        if (!cancelled) setDominantColorHex(hex);
+      } catch {
+        if (!cancelled) setDominantColorHex(null);
+      }
+    };
+    extractDominant();
+    return () => { cancelled = true; };
+  }, [backgroundImage]);
 
   const [imageHolder, setImageHolder] = useState<ImagePlaceholder>({
     x: (CANVAS_WIDTH - 300) / 2, y: 200, diameter: 300,
@@ -345,12 +330,22 @@ export default function App() {
     });
   }, [aspectRatioString, canvasHeight]);
 
-  // Height auto-tracks font size (grows AND shrinks like Figma auto-height).
-  // Formula: fontSize × lineHeight(1) + 24px padding (12 top + 12 bottom), capped at 12% canvas height.
+  // Height auto-tracks actual rendered font height (measured via DOM after fonts load).
+  // Reacts to font size, weight, stroke, shadow, and canvas height.
   useEffect(() => {
-    const autoH = Math.min(textStyle.fontSize + 24, Math.round(canvasHeight * 0.12));
-    setNameHolder(prev => prev.height !== autoH ? { ...prev, height: autoH } : prev);
-  }, [textStyle.fontSize, canvasHeight]);
+    let cancelled = false;
+    measureLineHeight(textStyle.fontSize, textStyle.fontWeight, nameFontFamily).then((lineH) => {
+      if (cancelled) return;
+      const autoH = computeNamePlaceholderAutoHeight(
+        lineH,
+        textStyle.textStroke,
+        textStyle.textShadow,
+        canvasHeight,
+      );
+      setNameHolder(prev => prev.height !== autoH ? { ...prev, height: autoH } : prev);
+    });
+    return () => { cancelled = true; };
+  }, [textStyle.fontSize, textStyle.fontWeight, textStyle.textStroke, textStyle.textShadow, canvasHeight, nameFontFamily]);
 
   const handleExport = async () => {
     if (selectedTags.length === 0) {
@@ -366,18 +361,22 @@ export default function App() {
     try {
       // 1. Convert background image to blob
       const bgBlob = await fetch(backgroundImage!).then(r => r.blob());
-      const contentType = bgBlob.type as ImageContentType;
+      const uploadContentType = normalizeRasterUploadContentType(bgBlob, backgroundImage);
+      const uploadBlob =
+        bgBlob.type === uploadContentType
+          ? bgBlob
+          : new Blob([await bgBlob.arrayBuffer()], { type: uploadContentType });
 
       // 2. Get presigned URL
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const ext = contentType.split('/')[1];
+      const ext = extensionForRasterContentType(uploadContentType);
       const { url: presignedUrl, fields } = await getPresignedUrl({
         file_name: `background-${ts}.${ext}`,
-        content_type: contentType,
+        content_type: uploadContentType,
       });
 
       // 3. Upload image via presigned POST
-      await uploadImage(presignedUrl, fields, bgBlob);
+      await uploadImage(presignedUrl, fields, uploadBlob);
       const file_url = fields.key;
 
       // 4. Build payload
@@ -394,7 +393,8 @@ export default function App() {
         pc: selectedTags,
         lg: selectedLanguages,
         bg: file_url,
-        mt: mediaType,
+        dc: dominantColorHex,
+        mt: 'image',
         ip: {
           x: Math.round((imageHolder.x / CANVAS_WIDTH) * 100),
           y: Math.round((imageHolder.y / canvasHeight) * 100),
@@ -438,26 +438,182 @@ export default function App() {
         },
       };
 
-      // 5. Create poster template and download response
-      const template = await createPosterTemplate({ title: `template-${ts}`, raw_config });
-
-      const jsonString = JSON.stringify(template);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `template-${ts}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      toast.success('Template exported!', { description: 'JSON saved to your device.' });
+      // 5. Create poster template (sent to backend). No local JSON download.
+      await createPosterTemplate({ title: `template-${ts}`, raw_config });
+      toast.success('Template exported!', { description: 'Saved to backend.' });
     } catch (err) {
       toast.error('Export failed', { description: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setIsExporting(false);
     }
   };
+
+  const handleDownloadRenderedImage = useCallback(async () => {
+    if (!backgroundImage) {
+      toast.error('No canvas image to download.');
+      return;
+    }
+    try {
+      const loadImage = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new window.Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = src;
+        });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not initialize canvas renderer.');
+
+      // Background (cover fit, same as preview)
+      const bg = await loadImage(backgroundImage);
+      const srcAspect = bg.width / bg.height;
+      const dstAspect = CANVAS_WIDTH / canvasHeight;
+      let sx = 0; let sy = 0; let sw = bg.width; let sh = bg.height;
+      if (srcAspect > dstAspect) {
+        sw = bg.height * dstAspect;
+        sx = (bg.width - sw) / 2;
+      } else if (srcAspect < dstAspect) {
+        sh = bg.width / dstAspect;
+        sy = (bg.height - sh) / 2;
+      }
+      ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
+
+      // Photo placeholder image (uploaded user photo or preview sample)
+      const previewPhoto = userPhoto || (photoHasBackground ? samplePhotoBg : samplePhotoNoBg);
+      if (previewPhoto) {
+        const pimg = await loadImage(previewPhoto);
+        const d = imageHolder.diameter;
+        const px = imageHolder.x;
+        const py = imageHolder.y;
+        const radius = photoShape === 'circle' ? d / 2 : photoCornerRadius;
+
+        ctx.save();
+        ctx.beginPath();
+        if (photoShape === 'circle') {
+          ctx.arc(px + d / 2, py + d / 2, d / 2, 0, Math.PI * 2);
+        } else {
+          const rr = Math.max(0, Math.min(radius, d / 2));
+          ctx.moveTo(px + rr, py);
+          ctx.arcTo(px + d, py, px + d, py + d, rr);
+          ctx.arcTo(px + d, py + d, px, py + d, rr);
+          ctx.arcTo(px, py + d, px, py, rr);
+          ctx.arcTo(px, py, px + d, py, rr);
+          ctx.closePath();
+        }
+        ctx.clip();
+        ctx.drawImage(pimg, px, py, d, d);
+        ctx.restore();
+
+        if (photoStrokeWidth > 0) {
+          ctx.save();
+          ctx.strokeStyle = normalizeHex(photoStrokeColor, '#FFFFFF');
+          ctx.lineWidth = photoStrokeWidth;
+          ctx.beginPath();
+          if (photoShape === 'circle') {
+            ctx.arc(px + d / 2, py + d / 2, d / 2 - photoStrokeWidth / 2, 0, Math.PI * 2);
+          } else {
+            const rr = Math.max(0, Math.min(radius, d / 2));
+            const inset = photoStrokeWidth / 2;
+            const x0 = px + inset;
+            const y0 = py + inset;
+            const w0 = d - photoStrokeWidth;
+            const h0 = d - photoStrokeWidth;
+            ctx.moveTo(x0 + rr, y0);
+            ctx.arcTo(x0 + w0, y0, x0 + w0, y0 + h0, rr);
+            ctx.arcTo(x0 + w0, y0 + h0, x0, y0 + h0, rr);
+            ctx.arcTo(x0, y0 + h0, x0, y0, rr);
+            ctx.arcTo(x0, y0, x0 + w0, y0, rr);
+            ctx.closePath();
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Name text
+      const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
+      const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
+      const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
+      const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
+      const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
+
+      ctx.save();
+      ctx.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${nameFontFamily}`;
+      ctx.textAlign = textStyle.textAlignment as CanvasTextAlign;
+      ctx.textBaseline = 'middle';
+
+      const shadowPad = Math.max(safeShadow.blur + Math.max(Math.abs(safeShadow.offsetX), Math.abs(safeShadow.offsetY)), 0);
+      const totalPad = Math.max(safeStroke.width, shadowPad);
+      const contentLeft = nameHolder.x + totalPad + 6;
+      const contentRight = nameHolder.x + nameHolder.width - totalPad - 6;
+      const midY = nameHolder.y + nameHolder.height / 2;
+      const textX = textStyle.textAlignment === 'left'
+        ? contentLeft
+        : textStyle.textAlignment === 'right'
+          ? contentRight
+          : (contentLeft + contentRight) / 2;
+
+      if (safeStroke.width > 0) {
+        const strokeOffsets = textStrokeToRNShadows(safeStroke);
+        strokeOffsets.forEach((s) => {
+          ctx.shadowOffsetX = s.textShadowOffset.width;
+          ctx.shadowOffsetY = s.textShadowOffset.height;
+          ctx.shadowBlur = 0;
+          ctx.shadowColor = s.textShadowColor;
+          ctx.fillStyle = safeTextColor;
+          ctx.fillText(userName, textX, midY);
+        });
+      }
+
+      ctx.shadowOffsetX = safeShadow.offsetX;
+      ctx.shadowOffsetY = safeShadow.offsetY;
+      ctx.shadowBlur = safeShadow.blur;
+      ctx.shadowColor = hexToRgba(safeShadow.color, safeShadow.opacity);
+      ctx.fillStyle = safeTextColor;
+      ctx.fillText(userName, textX, midY);
+      ctx.restore();
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.href = dataUrl;
+      link.download = `rendered-poster-${ts}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Rendered image downloaded.');
+    } catch (err) {
+      toast.error('Download failed', { description: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }, [
+    backgroundImage,
+    canvasHeight,
+    imageHolder,
+    userPhoto,
+    photoHasBackground,
+    photoShape,
+    photoCornerRadius,
+    photoStrokeColor,
+    photoStrokeWidth,
+    nameHolder,
+    textStyle,
+    userName,
+  ]);
+
+  const handleCopyDominantColor = useCallback(async () => {
+    if (!dominantColorHex) return;
+    try {
+      await navigator.clipboard.writeText(dominantColorHex);
+      setDominantColorCopied(true);
+      window.setTimeout(() => setDominantColorCopied(false), 1200);
+    } catch {
+      toast.error('Could not copy color code.');
+    }
+  }, [dominantColorHex]);
 
   const currentStep = !backgroundImage
     ? 1
@@ -471,16 +627,17 @@ export default function App() {
     { n: 3, label: 'Export', icon: Download },
   ];
 
-  /* ================= LOGIN GATE ================= */
-  if (!isLoggedIn) {
-    return (
-      <Login onLogin={() => setIsLoggedIn(true)} />
-    );
-  }
-
   /* ================= UI ================= */
   return (
     <div className={`${isDarkMode ? 'dark' : ''} h-screen flex flex-col bg-background text-foreground overflow-hidden`}>
+      {!isLoggedIn ? (
+        <Login
+          onLogin={() => setIsLoggedIn(true)}
+          isDarkMode={isDarkMode}
+          onThemeToggle={setIsDarkMode}
+        />
+      ) : (
+        <>
       {/* ═══ Header ═══ */}
       <header className="h-12 shrink-0 flex items-center justify-between bg-card border-b border-border z-50 px-[16px] py-[0px]">
         <div className="flex items-center gap-2.5">
@@ -513,21 +670,16 @@ export default function App() {
               {imageDimensions.width} x {imageDimensions.height} ({aspectRatioString})
             </span>
           )}
+          <ThemeToggle isDarkMode={isDarkMode} onToggle={setIsDarkMode} />
           <Button
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={toggleTheme}
-            ref={themeToggleRef}
-          >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </Button>
-          <button
+            size="sm"
             onClick={() => { clearToken(); setIsLoggedIn(false); }}
-            className="text-sm font-semibold text-red-600"
+            className="h-8 text-muted-foreground hover:text-destructive"
           >
+            <LogOut className="w-3.5 h-3.5" />
             Logout
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -540,7 +692,6 @@ export default function App() {
               <ImageUploader
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
-                mediaType={mediaType}
               />
               {!backgroundImage && (
                 <div className="mt-3 flex flex-wrap gap-1">
@@ -581,13 +732,14 @@ export default function App() {
                 </div>
 
                 {categoriesError ? (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">{isProfileTemplate ? 'Self' : 'Wishes'} Tags</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-destructive">Something went wrong</span>
-                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={fetchCategories}>Retry</Button>
-                    </div>
-                  </div>
+                  <Alert variant="destructive" className="py-2.5 px-3">
+                    <AlertCircle />
+                    <AlertTitle className="text-xs">{isProfileTemplate ? 'Self' : 'Wishes'} Tags</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between gap-2 text-xs">
+                      <span>Couldn't load tags</span>
+                      <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchCategories}>Retry</Button>
+                    </AlertDescription>
+                  </Alert>
                 ) : (
                   <TagSelector
                     title={`${isProfileTemplate ? 'Self' : 'Wishes'} Tags`}
@@ -601,13 +753,14 @@ export default function App() {
                 <Separator />
 
                 {languagesError ? (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">Language</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-destructive">Something went wrong</span>
-                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={fetchLanguages}>Retry</Button>
-                    </div>
-                  </div>
+                  <Alert variant="destructive" className="py-2.5 px-3">
+                    <AlertCircle />
+                    <AlertTitle className="text-xs">Language</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between gap-2 text-xs">
+                      <span>Couldn't load languages</span>
+                      <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchLanguages}>Retry</Button>
+                    </AlertDescription>
+                  </Alert>
                 ) : (
                   <TagSelector
                     title="Language"
@@ -631,6 +784,10 @@ export default function App() {
                 canvasWidth={CANVAS_WIDTH}
                 canvasHeight={canvasHeight}
                 onExport={handleExport}
+                onDownloadImage={handleDownloadRenderedImage}
+                dominantColorHex={dominantColorHex}
+                dominantColorCopied={dominantColorCopied}
+                onCopyDominantColor={handleCopyDominantColor}
                 isExporting={isExporting}
               />
             </PanelSection>
@@ -658,9 +815,10 @@ export default function App() {
             userPhoto={userPhoto}
             samplePhoto={photoHasBackground ? samplePhotoBg : samplePhotoNoBg}
             photoHasBackground={photoHasBackground}
-            mediaType={mediaType}
+            mediaType="image"
             textAlignment={textStyle.textAlignment}
             letterSpacing={textStyle.letterSpacing}
+            textFontFamily={nameFontFamily}
             photoShape={photoShape}
             photoCornerRadius={photoCornerRadius}
             photoStrokeWidth={photoStrokeWidth}
@@ -804,6 +962,8 @@ export default function App() {
           </div>
         </aside>
       </div>
+        </>
+      )}
 
       <Toaster richColors position="bottom-center" />
       <LsdEasterEgg open={showEasterEgg} onClose={() => setShowEasterEgg(false)} />

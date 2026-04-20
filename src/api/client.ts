@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-//TODO: Remove this and use the import.meta.env.VITE_API_BASE_URL
-//const BASE = 'https://testapi.getlokalapp.com';
-const BASE = 'https://api.getlokalapp.com';
+const BASE = import.meta.env.VITE_API_BASE_URL || 'https://testapi.getlokalapp.com';
+const NETWORK_DISABLED = import.meta.env.VITE_DISABLE_NETWORK === 'true';
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'auth_token';
@@ -30,6 +29,11 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  if (NETWORK_DISABLED) {
+    return Promise.reject(
+      new Error('Network requests are disabled in local mode (VITE_DISABLE_NETWORK=true).')
+    );
+  }
   const token = getToken();
   if (token) config.headers.Authorization = `Token ${token}`;
   return config;
