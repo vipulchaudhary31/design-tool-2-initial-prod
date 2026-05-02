@@ -54,6 +54,12 @@ interface DraggablePlaceholderProps {
 
 const CORNER_HIT_SIZE = 18;
 
+/** Canvas selection accents — fixed OKLCH so handles match dark mode even in light UI (avoid theme `primary`). */
+const SEL_HANDLE_FILL = 'oklch(0.768 0.1305 223.2)';
+const SEL_HANDLE_BORDER_IDLE = 'oklch(0.5 0.12 223)';
+const SEL_HANDLE_RING = 'oklch(0.768 0.1305 223.2 / 0.9)';
+const SEL_HANDLE_RING_RECT = 'oklch(0.768 0.1305 223.2 / 0.8)';
+
 function getCorner(localX: number, localY: number, boxW: number, boxH: number): Corner {
   // Clamp hit zone so the centre 40% of the element always stays grabbable,
   // even when the band is tiny (e.g. 72 design-px at 0.46 canvas scale ≈ 33 screen-px).
@@ -561,10 +567,13 @@ export function DraggablePlaceholder({
                   }}
                 >
                   <div
-                    className={`w-full h-full rounded-sm shadow-md border-2 ${
-                      hoveredCorner === corner ? 'bg-primary border-primary scale-125' : 'bg-white border-primary/70'
+                    className={`w-full h-full rounded-sm shadow-md border-2 bg-white transition-all duration-100 ${
+                      hoveredCorner === corner ? 'scale-125' : ''
                     }`}
-                    style={{ transition: 'all 100ms ease' }}
+                    style={{
+                      borderColor: hoveredCorner === corner ? SEL_HANDLE_FILL : SEL_HANDLE_BORDER_IDLE,
+                      backgroundColor: hoveredCorner === corner ? SEL_HANDLE_FILL : 'white',
+                    }}
                   />
                 </div>
               );
@@ -591,10 +600,8 @@ export function DraggablePlaceholder({
                     width:  isH ? 28 : 6,
                     height: isH ? 6  : 28,
                     borderRadius: 3,
-                    background: hoveredCorner === edge
-                      ? 'oklch(0.768 0.1305 223.2)'
-                      : 'white',
-                    border: `1.5px solid ${hoveredCorner === edge ? 'oklch(0.768 0.1305 223.2)' : 'oklch(0.5 0.12 223)'}`,
+                    background: hoveredCorner === edge ? SEL_HANDLE_FILL : 'white',
+                    border: `1.5px solid ${hoveredCorner === edge ? SEL_HANDLE_FILL : SEL_HANDLE_BORDER_IDLE}`,
                     boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
                     pointerEvents: 'none',
                     transition: 'all 100ms ease',
@@ -625,9 +632,7 @@ export function DraggablePlaceholder({
           className="absolute inset-0 pointer-events-none transition-all duration-150"
           style={{
             borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
-            boxShadow: isSelected || interacting
-              ? `0 0 0 2px oklch(0.768 0.1305 223.2 / 0.9)`
-              : 'none',
+            boxShadow: isSelected || interacting ? `0 0 0 2px ${SEL_HANDLE_RING}` : 'none',
           }}
         />
       </div>
@@ -681,10 +686,13 @@ export function DraggablePlaceholder({
                 }}
               >
                 <div
-                  className={`w-full h-full rounded-sm shadow-md border-2 ${
-                    hoveredCorner === corner ? 'bg-primary border-primary scale-125' : 'bg-white border-primary/70'
+                  className={`w-full h-full rounded-sm shadow-md border-2 bg-white transition-all duration-100 ${
+                    hoveredCorner === corner ? 'scale-125' : ''
                   }`}
-                  style={{ transition: 'all 100ms ease' }}
+                  style={{
+                    borderColor: hoveredCorner === corner ? SEL_HANDLE_FILL : SEL_HANDLE_BORDER_IDLE,
+                    backgroundColor: hoveredCorner === corner ? SEL_HANDLE_FILL : 'white',
+                  }}
                 />
               </div>
             );
@@ -709,10 +717,8 @@ export function DraggablePlaceholder({
                   width:  isH ? 28 : 6,
                   height: isH ? 6  : 28,
                   borderRadius: 3,
-                  background: hoveredCorner === edge
-                    ? 'oklch(0.768 0.1305 223.2)'
-                    : 'white',
-                  border: `1.5px solid ${hoveredCorner === edge ? 'oklch(0.768 0.1305 223.2)' : 'oklch(0.5 0.12 223)'}`,
+                  background: hoveredCorner === edge ? SEL_HANDLE_FILL : 'white',
+                  border: `1.5px solid ${hoveredCorner === edge ? SEL_HANDLE_FILL : SEL_HANDLE_BORDER_IDLE}`,
                   boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
                   pointerEvents: 'none',
                   transition: 'all 100ms ease',
@@ -740,9 +746,7 @@ export function DraggablePlaceholder({
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-150"
         style={{
-          boxShadow: isSelected || interacting
-            ? '0 0 0 1.5px oklch(0.768 0.1305 223.2 / 0.8)'
-            : 'none',
+          boxShadow: isSelected || interacting ? `0 0 0 1.5px ${SEL_HANDLE_RING_RECT}` : 'none',
         }}
       />
       {/* Text Content — vertically centred, not clipped (overflow:visible so stroke/shadow show) */}

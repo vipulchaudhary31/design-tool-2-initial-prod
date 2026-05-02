@@ -4,7 +4,15 @@ const baseUrl = import.meta.env.BASE_URL;
 const image_c92d52e8598ae346d604fac2120bd87eab98c2a9 = `${baseUrl}placeholder-logo.png`;
 const samplePhotoBg = `${baseUrl}assets/sample-photo-bg.png`;
 const samplePhotoNoBg = `${baseUrl}assets/sample-photo-nobg.png`;
-import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { ImageUploader } from '@/app/components/ImageUploader';
 import { ThemeToggle } from '@/app/components/ThemeToggle';
 import { DesignCanvas } from '@/app/components/DesignCanvas';
@@ -41,11 +49,17 @@ import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
 import { extensionForRasterContentType, normalizeRasterUploadContentType } from '@/utils/isRasterBackgroundFile';
+import {
+  loadPosterStudioSession,
+  savePosterStudioSession,
+  clearPosterStudioSession,
+  type PosterStudioSessionPayload,
+} from '@/utils/posterStudioSession';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
   Upload, Tags, Download, User, Circle, Square,
   ChevronRight, ImageIcon, X, Palette,
-  SlidersHorizontal, AlertCircle, LogOut,
+  SlidersHorizontal, AlertCircle, LogOut, Loader2,
 } from 'lucide-react';
 
 interface ImagePlaceholder {
@@ -62,6 +76,14 @@ interface NamePlaceholder {
 }
 
 const CANVAS_WIDTH = 1080;
+
+/** Keep splash visible this long after all boot checks pass (smooth handoff). */
+const MIN_STUDIO_SPLASH_MS = 550;
+
+function isVideoBackgroundUrl(url: string): boolean {
+  if (/^data:video\//i.test(url)) return true;
+  return /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url);
+}
 
 const ALLOWED_CANVAS_SIZES = [
   { height: 1152, label: '1080 x 1152' },
@@ -88,6 +110,72 @@ function computeAspectRatioString(width: number, height: number): string {
   return `${sw}:${sh}`;
 }
 
+const DEFAULT_TEXT_STYLE: TextStyle = {
+  color: '#FFFFFF',
+  fontSize: 48,
+  fontWeight: 700,
+  letterSpacing: 0,
+  textShadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000', opacity: 0 },
+  textStroke: { width: 0, color: '#000000' },
+  textAlignment: 'center',
+  maxWidthPercent: 80,
+};
+
+function defaultImageHolder(): ImagePlaceholder {
+  return {
+    x: (CANVAS_WIDTH - 300) / 2,
+    y: 200,
+    diameter: 300,
+  };
+}
+
+function defaultNameHolder(): NamePlaceholder {
+  return {
+    x: (CANVAS_WIDTH - Math.round(CANVAS_WIDTH * 0.8)) / 2,
+    y: 550,
+    width: Math.round(CANVAS_WIDTH * 0.8),
+    height: 72,
+  };
+}
+
+function applyPosterSnapshot(
+  snap: PosterStudioSessionPayload,
+  apply: {
+    setBackgroundImage: (v: string | null) => void;
+    setImageDimensions: Dispatch<SetStateAction<{ width: number; height: number } | null>>;
+    setIsProfileTemplate: (v: boolean) => void;
+    setSelectedTags: (v: string[]) => void;
+    setSelectedLanguages: (v: string[]) => void;
+    setUserName: (v: string) => void;
+    setUserPhoto: (v: string | null) => void;
+    setPhotoShape: (v: 'circle' | 'square') => void;
+    setPhotoCornerRadius: (v: number) => void;
+    setPhotoHasBackground: (v: boolean) => void;
+    setPhotoStrokeWidth: (v: number) => void;
+    setPhotoStrokeColor: (v: string) => void;
+    setIsDarkMode: (v: boolean) => void;
+    setTextStyle: Dispatch<SetStateAction<TextStyle>>;
+    setImageHolder: Dispatch<SetStateAction<ImagePlaceholder>>;
+    setNameHolder: Dispatch<SetStateAction<NamePlaceholder>>;
+  },
+) {
+  apply.setBackgroundImage(snap.backgroundImage);
+  apply.setImageDimensions(snap.imageDimensions);
+  apply.setIsProfileTemplate(snap.isProfileTemplate);
+  apply.setSelectedTags([...snap.selectedTags]);
+  apply.setSelectedLanguages([...snap.selectedLanguages]);
+  apply.setUserName(snap.userName);
+  apply.setUserPhoto(snap.userPhoto);
+  apply.setPhotoShape(snap.photoShape);
+  apply.setPhotoCornerRadius(snap.photoCornerRadius);
+  apply.setPhotoHasBackground(snap.photoHasBackground);
+  apply.setPhotoStrokeWidth(snap.photoStrokeWidth);
+  apply.setPhotoStrokeColor(snap.photoStrokeColor);
+  apply.setIsDarkMode(snap.isDarkMode);
+  apply.setTextStyle(snap.textStyle);
+  apply.setImageHolder(snap.imageHolder);
+  apply.setNameHolder(snap.nameHolder);
+}
 
 /* ── Collapsible panel section ─────────────────────────────────────── */
 function PanelSection({ title, icon, children, defaultOpen = true, badge }: {
@@ -166,6 +254,12 @@ export default function App() {
   const [languagesError,   setLanguagesError]   = useState(false);
   const [categoriesError,  setCategoriesError]  = useState(false);
   const [isExporting,      setIsExporting]      = useState(false);
+  const [persistReady, setPersistReady]       = useState(false);
+  const [splashDismissed, setSplashDismissed] = useState(false);
+  const [catalogReady, setCatalogReady]     = useState(false);
+  const [fontsReady, setFontsReady]         = useState(false);
+  const [backgroundGateReady, setBackgroundGateReady] = useState(true);
+  const quotaWarningShownRef = useRef(false);
 
   async function fetchLanguages() {
     setLanguagesError(false);
@@ -205,16 +299,28 @@ export default function App() {
   const [photoStrokeWidth, setPhotoStrokeWidth] = useState<number>(0);
   const [photoStrokeColor, setPhotoStrokeColor] = useState<string>('#FFFFFF');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
+
   const [dominantColorHex, setDominantColorHex] = useState<string | null>(null);
   const [dominantColorCopied, setDominantColorCopied] = useState<boolean>(false);
   const nameFontFamily = getNameFontFamilyForLabel(userName);
 
-  /* ── Fetch tag data whenever logged in (covers refresh with existing token) ── */
+  /* ── Fetch tag data whenever logged in; splash waits until both finish ── */
   useEffect(() => {
-    if (isLoggedIn) {
-      fetchLanguages();
-      fetchCategories();
+    if (!isLoggedIn) {
+      setCatalogReady(false);
+      return;
     }
+    let cancelled = false;
+    setCatalogReady(false);
+    void (async () => {
+      await Promise.all([fetchLanguages(), fetchCategories()]);
+      if (!cancelled) setCatalogReady(true);
+    })();
+    return () => { cancelled = true; };
   }, [isLoggedIn]);
 
   /* ── Set page title & favicon ── */
@@ -245,16 +351,7 @@ export default function App() {
     }
   }, []);
 
-  const [textStyle, setTextStyle] = useState<TextStyle>({
-    color: '#FFFFFF',
-    fontSize: 48,
-    fontWeight: 700,
-    letterSpacing: 0,
-    textShadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000', opacity: 0 },
-    textStroke: { width: 0, color: '#000000' },
-    textAlignment: 'center',
-    maxWidthPercent: 80,
-  });
+  const [textStyle, setTextStyle] = useState<TextStyle>({ ...DEFAULT_TEXT_STYLE });
 
   const canvasHeight = imageDimensions
     ? Math.round((CANVAS_WIDTH / imageDimensions.width) * imageDimensions.height)
@@ -285,7 +382,17 @@ export default function App() {
 
   const availableTags = isProfileTemplate ? profileTags : uploadTags;
 
-  useEffect(() => { setSelectedTags([]); }, [isProfileTemplate]);
+  const prevIsProfileTemplate = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (prevIsProfileTemplate.current === undefined) {
+      prevIsProfileTemplate.current = isProfileTemplate;
+      return;
+    }
+    if (prevIsProfileTemplate.current !== isProfileTemplate) {
+      setSelectedTags([]);
+    }
+    prevIsProfileTemplate.current = isProfileTemplate;
+  }, [isProfileTemplate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,16 +420,9 @@ export default function App() {
     return () => { cancelled = true; };
   }, [backgroundImage]);
 
-  const [imageHolder, setImageHolder] = useState<ImagePlaceholder>({
-    x: (CANVAS_WIDTH - 300) / 2, y: 200, diameter: 300,
-  });
+  const [imageHolder, setImageHolder] = useState<ImagePlaceholder>(() => defaultImageHolder());
 
-  const [nameHolder, setNameHolder] = useState<NamePlaceholder>({
-    x: (CANVAS_WIDTH - Math.round(CANVAS_WIDTH * 0.8)) / 2,
-    y: 550,
-    width: Math.round(CANVAS_WIDTH * 0.8),
-    height: 72, // default fontSize (48) + 24px padding
-  });
+  const [nameHolder, setNameHolder] = useState<NamePlaceholder>(() => defaultNameHolder());
 
   useEffect(() => {
     setImageHolder(prev => {
@@ -337,6 +437,170 @@ export default function App() {
       return (prev.y !== nextY || prev.x !== nextX) ? { ...prev, x: nextX, y: nextY } : prev;
     });
   }, [aspectRatioString, canvasHeight]);
+
+  /* ── Hydrate workspace from localStorage after login ── */
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setPersistReady(false);
+      return;
+    }
+    const snap = loadPosterStudioSession();
+    if (!snap) {
+      setPersistReady(true);
+      return;
+    }
+    applyPosterSnapshot(snap, {
+      setBackgroundImage,
+      setImageDimensions,
+      setIsProfileTemplate,
+      setSelectedTags,
+      setSelectedLanguages,
+      setUserName,
+      setUserPhoto,
+      setPhotoShape,
+      setPhotoCornerRadius,
+      setPhotoHasBackground,
+      setPhotoStrokeWidth,
+      setPhotoStrokeColor,
+      setIsDarkMode,
+      setTextStyle,
+      setImageHolder,
+      setNameHolder,
+    });
+    setPersistReady(true);
+  }, [isLoggedIn]);
+
+  /* ── Fonts: splash waits until webfonts needed by the canvas can render ── */
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setFontsReady(false);
+      return;
+    }
+    let cancelled = false;
+    setFontsReady(false);
+    const ready =
+      typeof document !== 'undefined' && document.fonts && typeof document.fonts.ready !== 'undefined'
+        ? document.fonts.ready
+        : Promise.resolve();
+    void ready.then(() => {
+      if (!cancelled) setFontsReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  /* ── Background raster/video: wait for first paint decode until splash dismisses ── */
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setBackgroundGateReady(true);
+      return;
+    }
+    if (splashDismissed) {
+      setBackgroundGateReady(true);
+      return;
+    }
+    if (!backgroundImage) {
+      setBackgroundGateReady(true);
+      return;
+    }
+    setBackgroundGateReady(false);
+    let cancelled = false;
+    const url = backgroundImage;
+    const done = () => {
+      if (!cancelled) setBackgroundGateReady(true);
+    };
+
+    if (isVideoBackgroundUrl(url)) {
+      const v = document.createElement('video');
+      v.preload = 'auto';
+      v.muted = true;
+      v.playsInline = true;
+      v.src = url;
+      v.addEventListener('loadeddata', done, { once: true });
+      v.addEventListener('error', done, { once: true });
+      try {
+        v.load();
+      } catch {
+        done();
+      }
+    } else {
+      const img = new Image();
+      img.onload = done;
+      img.onerror = done;
+      img.src = url;
+    }
+
+    return () => { cancelled = true; };
+  }, [isLoggedIn, backgroundImage, splashDismissed]);
+
+  const studioBootReady =
+    persistReady &&
+    catalogReady &&
+    fontsReady &&
+    backgroundGateReady;
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setSplashDismissed(false);
+      return;
+    }
+    if (!studioBootReady) return;
+    const id = window.setTimeout(() => setSplashDismissed(true), MIN_STUDIO_SPLASH_MS);
+    return () => window.clearTimeout(id);
+  }, [isLoggedIn, studioBootReady]);
+
+  const showStudioSplash = isLoggedIn && (!studioBootReady || !splashDismissed);
+
+  /* ── Persist workspace debounced ── */
+  useEffect(() => {
+    if (!isLoggedIn || !persistReady) return;
+    const timer = window.setTimeout(() => {
+      const saved = savePosterStudioSession({
+        v: 1,
+        backgroundImage,
+        imageDimensions,
+        isProfileTemplate,
+        selectedTags,
+        selectedLanguages,
+        userName,
+        userPhoto,
+        photoShape,
+        photoCornerRadius,
+        photoHasBackground,
+        photoStrokeWidth,
+        photoStrokeColor,
+        isDarkMode,
+        textStyle,
+        imageHolder,
+        nameHolder,
+      });
+      if (!saved && !quotaWarningShownRef.current) {
+        quotaWarningShownRef.current = true;
+        toast.warning('Could not autosave workspace', {
+          description: 'The design may be too large for browser storage. Try a smaller background image.',
+        });
+      }
+    }, 520);
+    return () => window.clearTimeout(timer);
+  }, [
+    isLoggedIn,
+    persistReady,
+    backgroundImage,
+    imageDimensions,
+    isProfileTemplate,
+    selectedTags,
+    selectedLanguages,
+    userName,
+    userPhoto,
+    photoShape,
+    photoCornerRadius,
+    photoHasBackground,
+    photoStrokeWidth,
+    photoStrokeColor,
+    isDarkMode,
+    textStyle,
+    imageHolder,
+    nameHolder,
+  ]);
 
   // Height auto-tracks actual rendered font height (measured via DOM after fonts load).
   // Reacts to font size, weight, stroke, shadow, and canvas height.
@@ -682,7 +946,13 @@ export default function App() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { clearToken(); setIsLoggedIn(false); }}
+            onClick={() => {
+              clearPosterStudioSession();
+              clearToken();
+              setIsLoggedIn(false);
+              setPersistReady(false);
+              quotaWarningShownRef.current = false;
+            }}
             className="h-8 text-muted-foreground hover:text-destructive"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -690,6 +960,21 @@ export default function App() {
           </Button>
         </div>
       </header>
+
+      {showStudioSplash && (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-4 bg-background text-foreground"
+          aria-busy="true"
+          aria-live="polite"
+          aria-label="Loading workspace"
+        >
+          <img src={lokalLogo} alt="" className="h-10 w-10 rounded-lg opacity-90" />
+          <div className="inline-flex flex-row items-center gap-1.5">
+            <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+            <span className="text-sm leading-none text-muted-foreground">Loading your workspace…</span>
+          </div>
+        </div>
+      )}
 
       {/* ═══ Body ═══ */}
       <div className="flex flex-1 overflow-hidden">
@@ -725,14 +1010,16 @@ export default function App() {
                   <Label className="text-xs text-muted-foreground mb-2">Template Type</Label>
                   <div className="flex bg-secondary rounded-md p-0.5">
                     <button
+                      type="button"
                       onClick={() => setIsProfileTemplate(true)}
-                      className={`flex-1 text-xs py-1.5 rounded-sm transition-all ${
+                      className={`flex-1 text-xs py-1.5 rounded-sm ${
                         isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >Self</button>
                     <button
+                      type="button"
                       onClick={() => setIsProfileTemplate(false)}
-                      className={`flex-1 text-xs py-1.5 rounded-sm transition-all ${
+                      className={`flex-1 text-xs py-1.5 rounded-sm ${
                         !isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >Wishes</button>
@@ -973,7 +1260,7 @@ export default function App() {
         </>
       )}
 
-      <Toaster richColors position="bottom-center" />
+      <Toaster theme={isDarkMode ? 'dark' : 'light'} richColors position="bottom-center" />
       <LsdEasterEgg open={showEasterEgg} onClose={() => setShowEasterEgg(false)} />
     </div>
   );

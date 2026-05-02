@@ -19,28 +19,36 @@ interface ImageUploaderProps {
 export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processChosenFile = (file: File, inputEl: HTMLInputElement) => {
     if (!isRasterBackgroundFile(file)) {
       toast.error('Unsupported file format', {
         description: 'Only JPEG, PNG, or WebP images are allowed.',
       });
-      e.target.value = '';
+      inputEl.value = '';
       return;
     }
     if (file.size > MAX_IMAGE_SIZE) {
       toast.error(`File too large (${formatFileSize(file.size)})`, {
         description: 'Image files must be under 15 MB.',
       });
-      e.target.value = '';
+      inputEl.value = '';
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => onImageUpload(reader.result as string);
+    reader.onloadend = () => {
+      onImageUpload(reader.result as string);
+    };
     reader.readAsDataURL(file);
-    e.target.value = '';
+    inputEl.value = '';
   };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processChosenFile(file, e.target);
+  };
+
+  const openPick = () => fileInputRef.current?.click();
 
   return (
     <div>
@@ -54,7 +62,8 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
 
       {!hasImage ? (
         <button
-          onClick={() => fileInputRef.current?.click()}
+          type="button"
+          onClick={openPick}
           className="w-full group flex flex-col items-center gap-2.5 py-6 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
         >
           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
@@ -74,7 +83,13 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
             <p className="text-xs text-foreground/80">Image loaded</p>
             <p className="text-[11px] text-muted-foreground">Ready to design</p>
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground"
+            type="button"
+            onClick={openPick}
+          >
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>

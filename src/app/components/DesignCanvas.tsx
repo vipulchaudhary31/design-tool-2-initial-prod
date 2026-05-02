@@ -47,13 +47,12 @@ interface DesignCanvasProps {
 const MAX_CANVAS_HEIGHT = 600;
 
 // ── Snap & distance visual tokens (on-brand with dark theme) ──
-// Primary blue from the theme: oklch(0.768 0.1305 223.2)
-const SNAP_PRIMARY = 'oklch(0.768 0.1305 223.2)'; // bright blue — center/edge snaps
-const SNAP_CROSS = 'oklch(0.65 0.09 280)'; // muted violet — cross-layer snaps
-const DIST_LINE = 'oklch(0.55 0.04 260)'; // subtle slate — distance lines
-const DIST_LABEL_BG = 'oklch(0.26 0.009 256 / 0.92)'; // card bg
-const DIST_LABEL_FG = 'oklch(0.74 0.003 286)'; // muted foreground
-const DIST_LABEL_BORDER = 'oklch(0.355 0.012 258 / 0.5)'; // border ring
+const SNAP_PRIMARY = 'oklch(0.768 0.1305 223.2)';
+const SNAP_CROSS = 'oklch(0.65 0.09 280)';
+const DIST_LINE = 'oklch(0.55 0.04 260)';
+const DIST_LABEL_BG = 'oklch(0.26 0.009 256 / 0.92)';
+const DIST_LABEL_FG = 'oklch(0.74 0.003 286)';
+const DIST_LABEL_BORDER = 'oklch(0.355 0.012 258 / 0.5)';
 
 export function DesignCanvas({
   backgroundImage,

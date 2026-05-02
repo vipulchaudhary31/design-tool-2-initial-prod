@@ -1,4 +1,11 @@
-**Add your own guidelines here**
+# Poster Studio — AI / contributor notes
+
+- **UI theme & primitives:** **`guidelines/DESIGN-SYSTEM.md`** — tokens, dark toggle, and **`ui/` component conventions** (`Button`, `select`, …).
+
+---
+
+**Legacy template below — optional examples**
+
 <!--
 
 System Guidelines

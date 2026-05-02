@@ -13,15 +13,16 @@
   --secondary-foreground: oklch(0.2280 0.0024 325.6563);
   --muted: oklch(0.9791 0 0);
   --muted-foreground: oklch(0.4903 0.0020 325.6074);
-  --accent: oklch(0.9619 0.0153 222.6804);
-  --accent-foreground: oklch(0.4909 0.1243 248.1375);
+  /* Hover surface: achromatic; purple only on foreground/ring for outline · ghost hovers */
+  --accent: oklch(0.958 0 0);
+  --accent-foreground: oklch(0.392 0.135 328);
   --destructive: oklch(0.5880 0.2216 11.4894);
   --destructive-foreground: oklch(1.0000 0 0);
   --border: oklch(0.8975 0 0);
   --input: oklch(0.8975 0 0);
   --input-background: #f3f3f5;
   --switch-background: #cbced4;
-  --ring: oklch(0.4909 0.1243 248.1375);
+  --ring: oklch(0.45 0.14 328);
   --chart-1: oklch(0.3065 0.1083 327.0624);
   --chart-2: oklch(0.6911 0.1422 160.2354);
   --chart-3: oklch(0.7966 0.1517 82.6501);

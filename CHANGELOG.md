@@ -8,6 +8,8 @@ Product, feature, and technical notes for Poster Studio (internal design tool). 
 
 _(Add items here before cutting a release or milestone.)_
 
+- **Docs:** **`guidelines/DESIGN-SYSTEM.md`** describes tokens, dark mode wiring, and shadcn-aligned accent hovers (`Button`, `select`, etc.); linked from **`README.md`** and **`guidelines/Guidelines.md`**.
+
 ---
 
 ## 2026-03-23 → 2026-04-20 — `mar23-dev-baseline` → `designer-exploration`
