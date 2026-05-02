@@ -76,7 +76,7 @@ export type CompactTemplateJSON = {
          * Compact stroke config.
          * width in design px (1080-wide canvas) and colour as hex.
          * RN renderer should generate the 24/36 shadow ring from these
-         * values using the algorithm described in TEMPLATE_JSON_SCHEMA.md.
+         * values using the algorithm described in TEMPLATE_JSON_SCHEMA_FRONTEND.md.
          */
         st: {
           w: number;
