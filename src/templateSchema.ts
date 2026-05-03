@@ -45,6 +45,23 @@ export type CompactTemplateJSON = {
     /** strokeColor (normalized hex) */
     sc: string;
   };
+  /**
+   * Photo/image placeholder animation — only set when mt === "video".
+   * null when no animation is selected or background is an image.
+   *
+   * The photo element slides along a path and arrives at the position
+   * the user placed it on the canvas. React Native should animate the
+   * photo's translateX / translateY from the entry offset to 0.
+   *
+   * p  = preset key  (direction the photo enters FROM)
+   * d  = duration in seconds
+   * dl = delay in seconds (before animation starts after video begins playing)
+   */
+  ia: {
+    p: 'bottom-to-top' | 'top-to-bottom' | 'left-to-right' | 'right-to-left';
+    d: number;
+    dl: number;
+  } | null;
   /** Name/text placeholder */
   np: {
     /** x position (% of canvas width, 0–100) */
@@ -131,5 +148,9 @@ export const TEMPLATE_KEY_MAP = {
   np_st_ts_sh: 'namePlaceholder.styling.textStyle.textShadow',
   np_st_ts_st: 'namePlaceholder.styling.textStyle.textStroke',
   np_st_ts_ta: 'namePlaceholder.styling.textStyle.textAlignment',
+  ia: 'imageAnimation',
+  ia_p: 'imageAnimation.preset',
+  ia_d: 'imageAnimation.durationSeconds',
+  ia_dl: 'imageAnimation.delaySeconds',
 } as const;
 

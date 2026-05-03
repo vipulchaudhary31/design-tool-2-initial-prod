@@ -35,6 +35,7 @@ interface TemplateJSONFull {
   /** Dominant colour sampled from the background in the editor (e.g. "#E84393"). */
   dominantColorHex: string | null;
   mediaType: 'image' | 'video';
+  imageAnimation: ImageAnimation | null;
   imagePlaceholder: ImagePlaceholder;
   namePlaceholder: NamePlaceholder;
 }
@@ -52,6 +53,7 @@ interface TemplateJSONFull {
 | `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png`/`.webp` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
 | `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image** in the editor. Always **`null`** for video backgrounds. |
 | `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPEG/PNG/WebP raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
+| `imageAnimation`    | `ImageAnimation` \| null    | Photo intro animation for video templates. `null` for image templates or when disabled. |
 | `imagePlaceholder`  | `ImagePlaceholder`          | Photo frame position/shape/border config                          |
 | `namePlaceholder`   | `NamePlaceholder`           | Name text band position + text styling                            |
 
@@ -82,6 +84,29 @@ interface ImagePlaceholder {
 | `hasBackground`   | boolean               | `true` = user photo keeps background, `false` = cutout/PNG         |
 | `strokeWidthPx`   | number                | Photo border width (design px, 0 = none)                           |
 | `strokeColor`     | string (hex)          | Photo border colour                                                |
+
+---
+
+### 2.1 `ImageAnimation`
+
+```ts
+interface ImageAnimation {
+  preset: 'bottom-to-top' | 'top-to-bottom' | 'left-to-right' | 'right-to-left';
+  durationSeconds: number;
+  delaySeconds: number;
+}
+```
+
+| Full name          | Type                                                             | Description |
+|--------------------|------------------------------------------------------------------|-------------|
+| `preset`           | `'bottom-to-top' \| 'top-to-bottom' \| 'left-to-right' \| 'right-to-left'` | Entry direction for the photo layer before settling at final `imagePlaceholder` coordinates. |
+| `durationSeconds`  | number                                                           | Animation duration in seconds. |
+| `delaySeconds`     | number                                                           | Delay before animation starts. Current studio exports `0` from UI. |
+
+Semantics:
+- Runs once from video start (`t=0`) and finishes by `durationSeconds`.
+- After completion, photo remains at final `imagePlaceholder` coordinates.
+- Renderer/export pipelines should not loop this unless playback restarts from `t=0`.
 
 ---
 
@@ -198,6 +223,7 @@ field path they map to in the logical model above.
 | `bg`        | `backgroundImage`    | **Storage key** for the uploaded background (or `data:` / full URL in legacy flows), or `null` |
 | `dc`        | `dominantColorHex`   | Dominant background colour `#RRGGBB`, or `null`                  |
 | `mt`        | `mediaType`          | Media type for `backgroundImage`: `"image"` or `"video"`         |
+| `ia`        | `imageAnimation`     | Photo intro animation payload (video templates only)             |
 | `ip`        | `imagePlaceholder`   | Image (photo) placeholder object                                 |
 | `np`        | `namePlaceholder`    | Name text placeholder object                                     |
 
@@ -217,6 +243,14 @@ All under `ip`:
 | `ip.hb`     | `imagePlaceholder.hasBackground`            | Has background — `true` = full photo, `false` = cutout PNG       |
 | `ip.sw`     | `imagePlaceholder.strokeWidthPx`            | Photo border (stroke) width in design px                         |
 | `ip.sc`     | `imagePlaceholder.strokeColor`              | Photo border (stroke) colour as hex string                       |
+
+#### 7.2.1 `ia` — Image animation
+
+| Compact key | Full path                         | Meaning |
+|-------------|-----------------------------------|---------|
+| `ia.p`      | `imageAnimation.preset`           | Direction preset (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) |
+| `ia.d`      | `imageAnimation.durationSeconds`  | Duration in seconds |
+| `ia.dl`     | `imageAnimation.delaySeconds`     | Delay in seconds (currently `0` from studio UI) |
 
 #### 7.3 `np` — Name placeholder
 
@@ -281,6 +315,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **`li` / `sa` (`publishLiveImmediately` / `scheduledAt`):** when `li` is `true`, expose the template/post as soon as it is persisted; when `false`, hold visibility until **`sa`** (parse as UTC ISO instant). Prefer **`sa === null`** when `li === true`.
 - **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production. File extension reflects the type (`.mp4` for video).
 - **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
+- **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
 - **`dc` / `dominantColorHex`:** always `null` for video backgrounds; optional for images. Safe to index as a string or `null`.
 - **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  
@@ -293,6 +328,7 @@ When `w === 0`, there is effectively **no stroke**.
 
 #### May 2026
 - **Video support:** `mt` can now be `"video"` (MP4). `bg` key ends in `.mp4`. `dc` is always `null` for video. `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
+- **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`, `ia.dl`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
 
 #### April 2026 (vs March 2026 baseline)
 - **`pn` → `postName`:** mandatory post title — mirrors **`title`** on template create requests.

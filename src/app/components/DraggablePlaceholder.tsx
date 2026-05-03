@@ -1,10 +1,32 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { motion } from 'motion/react';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
 import { computeSnap, computeResizeSnap, circleToRect, nameToRect } from './snap-engine';
 import type { Rect, SnapGuide } from './snap-engine';
 
 type Corner = 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r' | null;
+
+export type PhotoAnimationPreset = 'none' | 'bottom-to-top' | 'top-to-bottom' | 'left-to-right' | 'right-to-left';
+
+/**
+ * Entry offset for each preset (screen px — large enough to start off-canvas).
+ * Pure translate, no opacity change, so the photo slides cleanly into place.
+ */
+const PHOTO_ANIM_INITIAL: Record<PhotoAnimationPreset, object> = {
+  none:            {},
+  'bottom-to-top': { y: 900 },
+  'top-to-bottom': { y: -900 },
+  'left-to-right': { x: -900 },
+  'right-to-left': { x: 900 },
+};
+const PHOTO_ANIM_FINAL: Record<PhotoAnimationPreset, object> = {
+  none:            {},
+  'bottom-to-top': { y: 0 },
+  'top-to-bottom': { y: 0 },
+  'left-to-right': { x: 0 },
+  'right-to-left': { x: 0 },
+};
 
 interface DraggablePlaceholderProps {
   type: 'circle' | 'rectangle';
@@ -50,6 +72,8 @@ interface DraggablePlaceholderProps {
   onActiveGuides?: (guides: SnapGuide[]) => void;
   /** Reports the live moving rect during drag (for distance indicators) */
   onDragRect?: (rect: Rect | null) => void;
+  /** Photo layer animation — only used for circle type when background is video */
+  photoAnimation?: { preset: PhotoAnimationPreset; duration: number; delay: number; playKey: number };
 }
 
 const CORNER_HIT_SIZE = 18;
@@ -143,6 +167,7 @@ export function DraggablePlaceholder({
   otherRects = [],
   onActiveGuides,
   onDragRect,
+  photoAnimation,
 }: DraggablePlaceholderProps) {
   const safeScale = canvasScale || 1;
   const previewPhoto = userPhoto || samplePhoto;
@@ -523,26 +548,48 @@ export function DraggablePlaceholder({
           userSelect: 'none',
         }}
       >
-        {/* The visual shape */}
-        <div
-          className="w-full h-full flex items-center justify-center overflow-hidden"
-          style={{
-            border: photoStrokeWidth > 0 ? `${photoStrokeWidth * safeScale}px solid ${photoStrokeColor}` : 'none',
-            borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
-            boxSizing: 'border-box',
-            backgroundColor: previewPhoto
-              ? 'transparent'
-              : interacting ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          {previewPhoto ? (
-            <img src={previewPhoto} alt="User Photo" className="w-full h-full object-cover pointer-events-none" draggable={false} />
-          ) : (
-            <div className="text-muted-foreground text-xs px-3 py-1.5 rounded-full text-center pointer-events-none">
-              {label}
+        {/* The visual shape — wrapped in motion.div for photo path animation */}
+        {(() => {
+          const preset = photoAnimation?.preset ?? 'none';
+          const hasAnim = preset !== 'none';
+          const shapeContent = (
+            <div
+              className="w-full h-full flex items-center justify-center overflow-hidden"
+              style={{
+                border: photoStrokeWidth > 0 ? `${photoStrokeWidth * safeScale}px solid ${photoStrokeColor}` : 'none',
+                borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
+                boxSizing: 'border-box',
+                backgroundColor: previewPhoto
+                  ? 'transparent'
+                  : interacting ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              {previewPhoto ? (
+                <img src={previewPhoto} alt="User Photo" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+              ) : (
+                <div className="text-muted-foreground text-xs px-3 py-1.5 rounded-full text-center pointer-events-none">
+                  {label}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+          if (!hasAnim) return shapeContent;
+          return (
+            <motion.div
+              key={`${preset}-${photoAnimation?.playKey ?? 0}`}
+              className="w-full h-full"
+              initial={PHOTO_ANIM_INITIAL[preset]}
+              animate={PHOTO_ANIM_FINAL[preset]}
+              transition={{
+                duration: photoAnimation?.duration ?? 2,
+                // Keep this explicit so export renderer can match exactly.
+                ease: [0.42, 0, 0.58, 1],
+              }}
+            >
+              {shapeContent}
+            </motion.div>
+          );
+        })()}
 
         {/* Corner handles */}
         {onResizeDiameter && (

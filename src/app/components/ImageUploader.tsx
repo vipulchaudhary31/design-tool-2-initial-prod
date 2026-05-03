@@ -4,7 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -32,7 +32,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
     }
     if (file.size > MAX_FILE_SIZE) {
       toast.error(`File too large (${formatFileSize(file.size)})`, {
-        description: 'Files must be under 15 MB.',
+        description: 'Files must be under 50 MB.',
       });
       inputEl.value = '';
       return;
@@ -78,7 +78,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
           </div>
           <div className="text-center">
             <p className="text-sm text-foreground/80">Upload Background</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Image or video · max 15 MB</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Image or video · max 50 MB</p>
           </div>
         </button>
       ) : (

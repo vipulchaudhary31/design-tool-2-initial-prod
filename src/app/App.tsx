@@ -28,6 +28,7 @@ import {
   getNameFontFamilyForLabel,
 } from '@/app/components/TextStyleEditor';
 import { ExportPanel } from '@/app/components/ExportPanel';
+import type { PhotoAnimationPreset } from '@/app/components/DraggablePlaceholder';
 import { PostDetailsSection } from '@/app/components/PostDetailsSection';
 import { getColor } from 'colorthief';
 import { Toaster } from '@/app/components/ui/sonner';
@@ -64,7 +65,7 @@ import {
   Tags, Download, User, Circle, Square,
   ChevronRight, ImageIcon, Palette,
   SlidersHorizontal, AlertCircle, LogOut, Loader2,
-  CalendarClock,
+  CalendarClock, Play,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -272,6 +273,8 @@ export default function App() {
   const [languagesError,   setLanguagesError]   = useState(false);
   const [categoriesError,  setCategoriesError]  = useState(false);
   const [isExporting,      setIsExporting]      = useState(false);
+  const [isDownloadingPost, setIsDownloadingPost] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [persistReady, setPersistReady]       = useState(false);
   const [splashDismissed, setSplashDismissed] = useState(false);
   const [catalogReady, setCatalogReady]     = useState(false);
@@ -306,6 +309,9 @@ export default function App() {
   /* ================= DESIGN STATE ================= */
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [backgroundMediaType, setBackgroundMediaType] = useState<'image' | 'video'>('image');
+  const [photoAnimationPreset, setPhotoAnimationPreset] = useState<PhotoAnimationPreset>('none');
+  const [photoAnimationDuration, setPhotoAnimationDuration] = useState<number>(2.0);
+  const [photoAnimationReplayTick, setPhotoAnimationReplayTick] = useState<number>(0);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isProfileTemplate, setIsProfileTemplate] = useState<boolean>(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -486,6 +492,9 @@ export default function App() {
   const resetStudioWorkspaceToBlank = useCallback(() => {
     setBackgroundImage(null);
     setBackgroundMediaType('image');
+    setPhotoAnimationPreset('none');
+    setPhotoAnimationDuration(2.0);
+    setPhotoAnimationReplayTick(0);
     setImageDimensions(null);
     setIsProfileTemplate(true);
     setSelectedTags([]);
@@ -794,6 +803,9 @@ export default function App() {
         bg: file_url,
         dc: dominantColorHex,
         mt: backgroundMediaType,
+        ia: (backgroundMediaType === 'video' && photoAnimationPreset !== 'none')
+          ? { p: photoAnimationPreset, d: photoAnimationDuration, dl: 0 }
+          : null,
         li: postLiveImmediately,
         sa: scheduledAtIso,
         ip: {
@@ -854,10 +866,8 @@ export default function App() {
       toast.error('No canvas image to download.');
       return;
     }
-    if (backgroundMediaType === 'video') {
-      toast.error('Cannot render a preview image for video backgrounds.');
-      return;
-    }
+    setIsDownloadingPost(true);
+    setDownloadProgress(0);
     try {
       const loadImage = (src: string) =>
         new Promise<HTMLImageElement>((resolve, reject) => {
@@ -873,27 +883,62 @@ export default function App() {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Could not initialize canvas renderer.');
 
-      // Background (cover fit, same as preview)
-      const bg = await loadImage(backgroundImage);
-      const srcAspect = bg.width / bg.height;
-      const dstAspect = CANVAS_WIDTH / canvasHeight;
-      let sx = 0; let sy = 0; let sw = bg.width; let sh = bg.height;
-      if (srcAspect > dstAspect) {
-        sw = bg.height * dstAspect;
-        sx = (bg.width - sw) / 2;
-      } else if (srcAspect < dstAspect) {
-        sh = bg.width / dstAspect;
-        sy = (bg.height - sh) / 2;
-      }
-      ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
-
       // Photo placeholder image (uploaded user photo or preview sample)
       const previewPhoto = userPhoto || (photoHasBackground ? samplePhotoBg : samplePhotoNoBg);
-      if (previewPhoto) {
-        const pimg = await loadImage(previewPhoto);
+      const pimg = previewPhoto ? await loadImage(previewPhoto) : null;
+
+      const cubicBezierEase = (t: number, x1: number, y1: number, x2: number, y2: number) => {
+        if (t <= 0) return 0;
+        if (t >= 1) return 1;
+        const cx = 3 * x1;
+        const bx = 3 * (x2 - x1) - cx;
+        const ax = 1 - cx - bx;
+        const cy = 3 * y1;
+        const by = 3 * (y2 - y1) - cy;
+        const ay = 1 - cy - by;
+        const sampleX = (u: number) => ((ax * u + bx) * u + cx) * u;
+        const sampleY = (u: number) => ((ay * u + by) * u + cy) * u;
+        const sampleDx = (u: number) => (3 * ax * u + 2 * bx) * u + cx;
+        let u = t;
+        for (let i = 0; i < 6; i += 1) {
+          const x = sampleX(u) - t;
+          const dx = sampleDx(u);
+          if (Math.abs(x) < 1e-6 || Math.abs(dx) < 1e-6) break;
+          u -= x / dx;
+          u = Math.max(0, Math.min(1, u));
+        }
+        return sampleY(u);
+      };
+
+      const getAnimatedPhotoPosition = (timeSec: number) => {
+        if (backgroundMediaType !== 'video' || photoAnimationPreset === 'none') {
+          return { px: imageHolder.x, py: imageHolder.y };
+        }
+        const duration = Math.max(0.001, photoAnimationDuration);
+        const clampedProgress = Math.max(0, Math.min(timeSec / duration, 1));
+        // Match preview curve exactly: cubic-bezier(0.42, 0, 0.58, 1).
+        const eased = cubicBezierEase(clampedProgress, 0.42, 0, 0.58, 1);
+        const remain = 1 - eased;
+
+        const startOffsetX =
+          photoAnimationPreset === 'left-to-right' ? -900
+            : photoAnimationPreset === 'right-to-left' ? 900
+              : 0;
+        const startOffsetY =
+          photoAnimationPreset === 'bottom-to-top' ? 900
+            : photoAnimationPreset === 'top-to-bottom' ? -900
+              : 0;
+
+        return {
+          px: imageHolder.x + startOffsetX * remain,
+          py: imageHolder.y + startOffsetY * remain,
+        };
+      };
+
+      const drawForegroundLayers = (timeSec: number) => {
+        if (pimg) {
         const d = imageHolder.diameter;
-        const px = imageHolder.x;
-        const py = imageHolder.y;
+        const { px, py } = getAnimatedPhotoPosition(timeSec);
         const radius = photoShape === 'circle' ? d / 2 : photoCornerRadius;
 
         ctx.save();
@@ -981,6 +1026,98 @@ export default function App() {
       ctx.fillStyle = safeTextColor;
       ctx.fillText(userName, textX, midY);
       ctx.restore();
+      };
+
+      // Video: render composition frame-by-frame and record to webm
+      if (backgroundMediaType === 'video') {
+        if (!('MediaRecorder' in window) || !canvas.captureStream) {
+          throw new Error('Video download is not supported in this browser.');
+        }
+        const mimeType =
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
+            : MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8'
+              : 'video/webm';
+
+        const video = document.createElement('video');
+        video.src = backgroundImage;
+        video.preload = 'auto';
+        video.playsInline = true;
+        video.muted = true;
+        await new Promise<void>((resolve, reject) => {
+          video.onloadedmetadata = () => resolve();
+          video.onerror = () => reject(new Error('Failed to load video'));
+        });
+
+        const dstAspect = CANVAS_WIDTH / canvasHeight;
+        let sx = 0; let sy = 0; let sw = video.videoWidth; let sh = video.videoHeight;
+        const srcAspect = video.videoWidth / video.videoHeight;
+        if (srcAspect > dstAspect) {
+          sw = video.videoHeight * dstAspect;
+          sx = (video.videoWidth - sw) / 2;
+        } else if (srcAspect < dstAspect) {
+          sh = video.videoWidth / dstAspect;
+          sy = (video.videoHeight - sh) / 2;
+        }
+
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType });
+        const chunks: BlobPart[] = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+        let rafId: number | null = null;
+        const drawFrame = () => {
+          ctx.clearRect(0, 0, CANVAS_WIDTH, canvasHeight);
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
+          drawForegroundLayers(video.currentTime);
+          if (video.duration > 0 && Number.isFinite(video.duration)) {
+            const pct = Math.min(95, (video.currentTime / video.duration) * 95);
+            setDownloadProgress(pct);
+          }
+          rafId = requestAnimationFrame(drawFrame);
+        };
+
+        await new Promise<void>((resolve, reject) => {
+          recorder.onerror = () => reject(new Error('Failed to record video'));
+          recorder.onstop = () => resolve();
+          video.onended = () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            setDownloadProgress(98);
+            recorder.stop();
+          };
+          recorder.start();
+          drawFrame();
+          void video.play().catch(() => reject(new Error('Could not play video for download')));
+        });
+
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        link.href = url;
+        link.download = `post-${ts}.webm`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setDownloadProgress(100);
+        toast.success('Post downloaded.');
+        return;
+      }
+
+      // Image: single-frame render to png
+      const bg = await loadImage(backgroundImage);
+      const srcAspect = bg.width / bg.height;
+      const dstAspect = CANVAS_WIDTH / canvasHeight;
+      let sx = 0; let sy = 0; let sw = bg.width; let sh = bg.height;
+      if (srcAspect > dstAspect) {
+        sw = bg.height * dstAspect;
+        sx = (bg.width - sw) / 2;
+      } else if (srcAspect < dstAspect) {
+        sh = bg.width / dstAspect;
+        sy = (bg.height - sh) / 2;
+      }
+      ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
+      drawForegroundLayers(0);
 
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
@@ -990,9 +1127,15 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success('Rendered image downloaded.');
+      setDownloadProgress(100);
+      toast.success('Post downloaded.');
     } catch (err) {
       toast.error('Download failed', { description: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setTimeout(() => {
+        setIsDownloadingPost(false);
+        setDownloadProgress(0);
+      }, 300);
     }
   }, [
     backgroundImage,
@@ -1005,9 +1148,12 @@ export default function App() {
     photoCornerRadius,
     photoStrokeColor,
     photoStrokeWidth,
+    photoAnimationPreset,
+    photoAnimationDuration,
     nameHolder,
     textStyle,
     userName,
+    nameFontFamily,
   ]);
 
 
@@ -1122,9 +1268,6 @@ export default function App() {
                   <PanelSection
                     title="Categories"
                     icon={<Tags className="w-3.5 h-3.5" />}
-                    badge={selectedTags.length > 0 ? (
-                      <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full leading-none">{selectedTags.length}</span>
-                    ) : undefined}
                   >
                     <div className="space-y-4">
                       {categoriesError ? (
@@ -1224,7 +1367,10 @@ export default function App() {
                       canvasWidth={CANVAS_WIDTH}
                       canvasHeight={canvasHeight}
                       onExport={handleExport}
+                      onDownloadPost={handleDownloadRenderedImage}
                       isExporting={isExporting}
+                      isDownloadingPost={isDownloadingPost}
+                      downloadProgress={downloadProgress}
                       postName={postName}
                       postLiveImmediately={postLiveImmediately}
                       postScheduleDateKey={postScheduleDateKey}
@@ -1268,6 +1414,9 @@ export default function App() {
             photoStrokeColor={photoStrokeColor}
             onImageUpload={handleImageUpload}
             allowedCanvasSizes={ALLOWED_CANVAS_SIZES}
+            photoAnimationPreset={photoAnimationPreset}
+            photoAnimationDuration={photoAnimationDuration}
+            photoAnimationReplayTick={photoAnimationReplayTick}
           />
         </main>
 
@@ -1280,10 +1429,7 @@ export default function App() {
                   <div className="space-y-4">
                     {/* Background toggle */}
                     <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-xs text-foreground/80">User Background</Label>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Show profile bg</p>
-                      </div>
+                      <Label className="text-xs text-foreground/80">Show Background</Label>
                       <Switch
                         checked={photoHasBackground}
                         onCheckedChange={setPhotoHasBackground}
@@ -1315,25 +1461,26 @@ export default function App() {
                     )}
 
                     {/* Shape */}
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-2">Shape</Label>
-                      <div className="flex gap-1.5">
-                        <Button
-                          variant={photoShape === 'circle' ? 'default' : 'outline'}
-                          size="sm"
-                          className="flex-1 gap-1.5 text-xs"
-                          onClick={() => setPhotoShape('circle')}
-                        >
-                          <Circle className="w-3 h-3" /> Circle
-                        </Button>
-                        <Button
-                          variant={photoShape === 'square' ? 'default' : 'outline'}
-                          size="sm"
-                          className="flex-1 gap-1.5 text-xs"
-                          onClick={() => setPhotoShape('square')}
-                        >
-                          <Square className="w-3 h-3" /> Square
-                        </Button>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Shape</Label>
+                      <div className="flex items-center rounded-md border border-border bg-muted/40 p-0.5 gap-0.5">
+                        {([
+                          { value: 'circle', icon: <Circle className="w-3 h-3" />, label: 'Circle' },
+                          { value: 'square', icon: <Square className="w-3 h-3" />, label: 'Square' },
+                        ] as const).map(({ value, icon, label }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setPhotoShape(value)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                              photoShape === value
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {icon}{label}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
@@ -1352,6 +1499,65 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Photo Animation — only when video background */}
+                    {backgroundMediaType === 'video' && (
+                      <>
+                        <Separator />
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-foreground/80">Animation</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => setPhotoAnimationReplayTick((n) => n + 1)}
+                              disabled={photoAnimationPreset === 'none'}
+                              aria-label="Replay photo animation"
+                              title="Replay animation"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {([
+                              { key: 'none',          label: 'None' },
+                              { key: 'bottom-to-top', label: 'Bottom to Top' },
+                              { key: 'top-to-bottom', label: 'Top to Bottom' },
+                              { key: 'left-to-right', label: 'Left to Right' },
+                              { key: 'right-to-left', label: 'Right to Left' },
+                            ] as { key: PhotoAnimationPreset; label: string }[]).map(({ key, label }) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setPhotoAnimationPreset(key)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  photoAnimationPreset === key
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-transparent text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {photoAnimationPreset !== 'none' && (
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <p className="text-xs text-muted-foreground">Duration</p>
+                                <span className="text-xs text-muted-foreground font-mono">{photoAnimationDuration.toFixed(1)}s</span>
+                              </div>
+                              <Slider
+                                min={0.5} max={4.0} step={0.1}
+                                value={[photoAnimationDuration]}
+                                onValueChange={([v]) => setPhotoAnimationDuration(v)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
                   </div>
                 </PanelSection>
 
@@ -1363,6 +1569,7 @@ export default function App() {
                     onUserNameChange={setUserName}
                   />
                 </PanelSection>
+
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center px-8 py-12">

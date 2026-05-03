@@ -10,6 +10,9 @@ _(Add items here before cutting a release or milestone.)_
 
 - **Post details:** Mandatory **Post name** (defaults from uploaded image filename); **scheduled publishing** by default with **Publish live immediately** opt-in; **`raw_config`** adds **`pn`**, **`li`**, **`sa`** (`postName`, `publishLiveImmediately`, `scheduledAt`).
 - **Docs:** **`guidelines/DESIGN-SYSTEM.md`** describes tokens, dark mode wiring, and shadcn-aligned accent hovers (`Button`, `select`, etc.); linked from **`README.md`** and **`guidelines/Guidelines.md`**.
+- **Background media limits:** Upload cap increased from **15 MB** to **50 MB** for both image and video backgrounds.
+- **Photo animation (video templates):** Added photo intro animation presets in editor controls (under **User Photo**) with duration and replay affordance. Export payload now includes compact **`ia`** (`imageAnimation`) and video downloads render the same intro motion from `t=0` before settling at final `ip` coordinates.
+- **Template schema docs:** Frontend/backend contract docs now document `ia` semantics (direction presets, duration, one-shot playback behavior, and mapping).
 
 ---
 

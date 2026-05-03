@@ -87,6 +87,7 @@ Your app chooses the font. Sizes and weights are font-agnostic.
   "bg": "uploads/background-2026-04-19T10-20-30.jpg",
   "dc": "#E84393",
   "mt": "image",
+  "ia": null,
   "li": false,
   "sa": "2026-05-03T06:30:00.000Z",
   "ip": { ... },
@@ -104,6 +105,7 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 | `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`/`.webp`; for videos it ends in `.mp4`. |
 | `dc` | string \| `null`       | **Dominant colour** of the background (`#RRGGBB`), sampled from images only. Always **`null`** for video backgrounds. Use for UI chrome or placeholders when media is not yet loaded. |
 | `mt` | `"image"` \| `"video"` | Background media type. **`"image"`** = JPEG/PNG/WebP; **`"video"`** = MP4. Use this to decide whether to render `<Image>` or `<Video>` in your app. |
+| `ia` | object \| `null`       | Photo intro animation config. Present only for video templates when enabled; otherwise `null`. |
 | `li` | boolean                | Default **`false`**: **`sa`** selects go-live (**scheduled**). Set **`true`** for immediate publish once saved/processed (**`sa`** → **`null`**). |
 | `sa` | string \| **`null`**   | ISO 8601 UTC when **`li`** is **`false`** (typically in the future at export time). **`null`** when **`li`** is **`true`**. |
 | `ip` | object                 | Photo placeholder |
@@ -159,6 +161,32 @@ const photoTop    = (ip.y / 100) * canvasHeight;
 const borderRadius = ip.sh === 'circle' ? photoSize / 2 : (ip.cr ?? 0) * scale;
 const borderWidth  = ip.sw * scale;
 ```
+
+---
+
+## `ia` — Photo animation (video templates only)
+
+`ia` configures a **one-shot intro animation** for the photo layer.
+
+```json
+"ia": {
+  "p": "bottom-to-top",
+  "d": 2.0,
+  "dl": 0
+}
+```
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `p` | `"bottom-to-top"` \| `"top-to-bottom"` \| `"left-to-right"` \| `"right-to-left"` | Direction the photo enters **from** before settling at its `ip.x/ip.y` final position. |
+| `d` | number | Duration in seconds. |
+| `dl` | number | Delay in seconds. Current studio UI always exports `0`, but field remains for compatibility. |
+
+Runtime expectation on RN/export renderers:
+- Start the animation at **video time `0`**.
+- Run for **`d` seconds**.
+- End at the exact `ip` final coordinates and keep it there for the rest of the video.
+- Do not retrigger unless playback restarts from `0`.
 
 ---
 
@@ -388,3 +416,4 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 
 ### May 2026
 - **Video backgrounds (`mt: "video"`):** studio now accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. `dc` is always `null` for video. `ar` may be any GCD-reduced ratio (not limited to the 4 image presets). Render with `<Video>` when `mt === "video"`.
+- **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`) and delay (`dl`, currently `0` in studio UI). Applies to the **photo layer** (`ip`), not the name text layer.

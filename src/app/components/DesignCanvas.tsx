@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { DraggablePlaceholder } from './DraggablePlaceholder';
+import type { PhotoAnimationPreset } from './DraggablePlaceholder';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
 import { circleToRect, nameToRect, computeDistances, KEYBOARD_STEP, KEYBOARD_SHIFT_STEP } from './snap-engine';
@@ -9,7 +10,7 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
 interface ImagePlaceholder { x: number; y: number; diameter: number; }
@@ -43,9 +44,12 @@ interface DesignCanvasProps {
   photoStrokeColor?: string;
   onImageUpload?: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   allowedCanvasSizes?: { height: number; label: string }[];
+  photoAnimationPreset?: PhotoAnimationPreset;
+  photoAnimationDuration?: number;
+  photoAnimationReplayTick?: number;
 }
 
-const MAX_CANVAS_HEIGHT = 600;
+const MAX_CANVAS_HEIGHT = 640;
 
 // ── Snap & distance visual tokens (on-brand with dark theme) ──
 const SNAP_PRIMARY = 'oklch(0.768 0.1305 223.2)';
@@ -82,10 +86,14 @@ export function DesignCanvas({
   photoStrokeColor = '#000000',
   onImageUpload,
   allowedCanvasSizes,
+  photoAnimationPreset = 'none',
+  photoAnimationDuration = 2.0,
+  photoAnimationReplayTick = 0,
 }: DesignCanvasProps) {
   const [scale, setScale] = useState(1);
   const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | null>(null);
   const [videoMuted, setVideoMuted] = useState(true);
+  const [videoPlayCount, setVideoPlayCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Reset mute when background changes
@@ -268,7 +276,7 @@ export function DesignCanvas({
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File too large`, { description: 'Files must be under 15 MB.' });
+      toast.error(`File too large`, { description: 'Files must be under 50 MB.' });
       event.target.value = '';
       return;
     }
@@ -396,7 +404,7 @@ export function DesignCanvas({
       <div
         ref={canvasRef}
         onPointerDown={handleCanvasPointerDown}
-        className="relative rounded-md"
+        className="relative rounded-md overflow-hidden"
         style={{
           width: canvasWidth * scale,
           height: canvasHeight * scale,
@@ -416,6 +424,7 @@ export function DesignCanvas({
               loop
               muted={videoMuted}
               playsInline
+              onPlay={() => setVideoPlayCount(n => n + 1)}
             />
           )}
           {backgroundImage && mediaType === 'image' && (
@@ -473,6 +482,11 @@ export function DesignCanvas({
               otherRects={otherRectsForImage}
               onActiveGuides={handleImageGuides}
               onDragRect={handleImageDragRect}
+              photoAnimation={
+                mediaType === 'video' && photoAnimationPreset !== 'none'
+                  ? { preset: photoAnimationPreset, duration: photoAnimationDuration, delay: 0, playKey: (videoPlayCount * 10000) + photoAnimationReplayTick }
+                  : undefined
+              }
             />
             <DraggablePlaceholder
               type="rectangle"
