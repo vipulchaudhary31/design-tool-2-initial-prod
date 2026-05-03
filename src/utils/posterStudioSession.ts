@@ -25,6 +25,7 @@ export interface NamePlaceholderPersisted {
 export interface PosterStudioSessionPayload {
   v: typeof SCHEMA_VERSION;
   backgroundImage: string | null;
+  backgroundMediaType: 'image' | 'video';
   imageDimensions: { width: number; height: number } | null;
   isProfileTemplate: boolean;
   selectedTags: string[];
@@ -151,6 +152,7 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
     return {
       v: SCHEMA_VERSION,
       backgroundImage: strOrNull('backgroundImage'),
+      backgroundMediaType: data.backgroundMediaType === 'video' ? 'video' : 'image',
       imageDimensions: dims,
       isProfileTemplate: data.isProfileTemplate as boolean,
       selectedTags: data.selectedTags as string[],

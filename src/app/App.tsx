@@ -147,6 +147,7 @@ function applyPosterSnapshot(
   snap: PosterStudioSessionPayload,
   apply: {
     setBackgroundImage: (v: string | null) => void;
+    setBackgroundMediaType: (v: 'image' | 'video') => void;
     setImageDimensions: Dispatch<SetStateAction<{ width: number; height: number } | null>>;
     setIsProfileTemplate: (v: boolean) => void;
     setSelectedTags: (v: string[]) => void;
@@ -169,6 +170,7 @@ function applyPosterSnapshot(
   },
 ) {
   apply.setBackgroundImage(snap.backgroundImage);
+  apply.setBackgroundMediaType(snap.backgroundMediaType ?? 'image');
   apply.setImageDimensions(snap.imageDimensions);
   apply.setIsProfileTemplate(snap.isProfileTemplate);
   apply.setSelectedTags([...snap.selectedTags]);
@@ -526,6 +528,7 @@ export default function App() {
     }
     applyPosterSnapshot(snap, {
       setBackgroundImage,
+      setBackgroundMediaType,
       setImageDimensions,
       setIsProfileTemplate,
       setSelectedTags,
@@ -636,6 +639,7 @@ export default function App() {
       const saved = savePosterStudioSession({
         v: 1,
         backgroundImage,
+        backgroundMediaType,
         imageDimensions,
         isProfileTemplate,
         selectedTags,
@@ -668,6 +672,7 @@ export default function App() {
     isLoggedIn,
     persistReady,
     backgroundImage,
+    backgroundMediaType,
     imageDimensions,
     isProfileTemplate,
     selectedTags,

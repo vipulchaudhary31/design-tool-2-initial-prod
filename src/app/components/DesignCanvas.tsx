@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { DraggablePlaceholder } from './DraggablePlaceholder';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
@@ -84,6 +85,11 @@ export function DesignCanvas({
 }: DesignCanvasProps) {
   const [scale, setScale] = useState(1);
   const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | null>(null);
+  const [videoMuted, setVideoMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Reset mute when background changes
+  useEffect(() => { setVideoMuted(true); }, [backgroundImage]);
   const [activeGuides, setActiveGuides] = useState<SnapGuide[]>([]);
   const [dragRect, setDragRect] = useState<Rect | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -402,12 +408,34 @@ export function DesignCanvas({
         {/* Background media — clipped separately so layer badges can overflow */}
         <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none">
           {backgroundImage && mediaType === 'video' && (
-            <video src={backgroundImage} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+            <video
+              ref={videoRef}
+              src={backgroundImage}
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay
+              loop
+              muted={videoMuted}
+              playsInline
+            />
           )}
           {backgroundImage && mediaType === 'image' && (
             <img src={backgroundImage} alt="Background" className="absolute inset-0 w-full h-full object-cover" />
           )}
         </div>
+
+        {/* Mute/unmute button for video backgrounds */}
+        {backgroundImage && mediaType === 'video' && (
+          <button
+            type="button"
+            aria-label={videoMuted ? 'Unmute video' : 'Mute video'}
+            onClick={() => setVideoMuted(m => !m)}
+            className="absolute bottom-2 right-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors pointer-events-auto"
+          >
+            {videoMuted
+              ? <VolumeX className="w-3.5 h-3.5" />
+              : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+        )}
         {!backgroundImage && (
           <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group">
             <input
