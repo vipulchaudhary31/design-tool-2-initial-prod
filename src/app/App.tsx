@@ -31,6 +31,12 @@ import { ExportPanel } from '@/app/components/ExportPanel';
 import type { PhotoAnimationPreset } from '@/app/components/DraggablePlaceholder';
 import { PostDetailsSection } from '@/app/components/PostDetailsSection';
 import { getColor } from 'colorthief';
+import {
+  DOMINANT_COLOR_FALLBACK_HEX,
+  dominantColorHexOrBlack,
+  hexFromColorthiefColor,
+  pickBrighterDominantHex,
+} from '@/utils/dominantColorHex';
 import { Toaster } from '@/app/components/ui/sonner';
 import { toast } from 'sonner';
 import { Button } from '@/app/components/ui/button';
@@ -51,6 +57,7 @@ import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
 import { extensionForBackgroundContentType, normalizeBackgroundUploadContentType } from '@/utils/isRasterBackgroundFile';
+import { posterDesignHeightPx, nameStripBackgroundHex, stripDesignHeightPx } from '@/utils/nameStripStyle';
 import {
   loadPosterStudioSession,
   savePosterStudioSession,
@@ -128,6 +135,19 @@ const DEFAULT_TEXT_STYLE: TextStyle = {
   maxWidthPercent: 80,
 };
 
+const segmentedToggleGroupClass =
+  'inline-flex items-center rounded-lg border border-border/80 bg-muted/20 p-1 shadow-none';
+
+function segmentedToggleButtonClass(isActive: boolean) {
+  return [
+    'inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-0',
+    isActive
+      ? 'bg-primary text-primary-foreground shadow-none'
+      : 'text-muted-foreground hover:bg-transparent hover:text-foreground',
+  ].join(' ');
+}
+
 function defaultImageHolder(): ImagePlaceholder {
   return {
     x: (CANVAS_WIDTH - 300) / 2,
@@ -169,6 +189,7 @@ function applyPosterSnapshot(
     setPostLiveImmediately: (v: boolean) => void;
     setPostScheduleDateKey: (v: string) => void;
     setPostScheduleTimeHm: (v: string) => void;
+    setNameLayout: (v: 'strip' | 'overlay') => void;
   },
 ) {
   apply.setBackgroundImage(snap.backgroundImage);
@@ -192,6 +213,7 @@ function applyPosterSnapshot(
   apply.setPostLiveImmediately(snap.postLiveImmediately);
   apply.setPostScheduleDateKey(snap.postScheduleDateKey);
   apply.setPostScheduleTimeHm(snap.postScheduleTimeHm);
+  apply.setNameLayout(snap.nameLayout ?? 'strip');
 }
 
 /* ── Collapsible panel section ─────────────────────────────────────── */
@@ -312,6 +334,7 @@ export default function App() {
   const [photoAnimationPreset, setPhotoAnimationPreset] = useState<PhotoAnimationPreset>('none');
   const [photoAnimationDuration, setPhotoAnimationDuration] = useState<number>(2.0);
   const [photoAnimationReplayTick, setPhotoAnimationReplayTick] = useState<number>(0);
+  const [nameLayout, setNameLayout] = useState<'strip' | 'overlay'>('strip');
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isProfileTemplate, setIsProfileTemplate] = useState<boolean>(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -384,8 +407,12 @@ export default function App() {
   const canvasHeight = imageDimensions
     ? Math.round((CANVAS_WIDTH / imageDimensions.width) * imageDimensions.height)
     : 1350;
+  /** Background region only; strip is attached below when `nl === "strip"`. */
+  const posterCanvasHeight = backgroundImage && nameLayout === 'strip'
+    ? posterDesignHeightPx(canvasHeight, true)
+    : canvasHeight;
   const aspectRatioString = imageDimensions
-    ? computeAspectRatioString(imageDimensions.width, imageDimensions.height)
+    ? computeAspectRatioString(CANVAS_WIDTH, posterCanvasHeight)
     : '';
 
   const handleImageUpload = (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => {
@@ -446,24 +473,87 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const colorThiefOpts = { quality: 8, ignoreWhite: false } as const;
+
+    const extractFromImage = async (src: string) => {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Could not load image for color extraction.'));
+        img.src = src;
+      });
+      const color = await getColor(img, colorThiefOpts);
+      return hexFromColorthiefColor(color);
+    };
+
+    const extractHexFromVideoFrame = async (video: HTMLVideoElement): Promise<string | null> => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/png');
+      const img = new window.Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Could not load video frame for color extraction.'));
+        img.src = dataUrl;
+      });
+      const color = await getColor(img, colorThiefOpts);
+      return hexFromColorthiefColor(color);
+    };
+
+    // Two seek positions when possible — a single frame can be black (fade-in) or unrepresentative.
+    const extractFromVideo = async (src: string) => {
+      const video = document.createElement('video');
+      video.src = src;
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error('Could not load video for color extraction.'));
+      });
+
+      const seekTimes = (() => {
+        if (!Number.isFinite(video.duration) || video.duration <= 0) return [0];
+        const d = video.duration;
+        const t1 = Math.min(Math.max(0.12, d * 0.14), d - 0.05);
+        const t2 = Math.min(Math.max(0.2, d * 0.32), d - 0.05);
+        return Math.abs(t2 - t1) > 0.12 ? [t1, t2] : [t1];
+      })();
+
+      const samples: string[] = [];
+      for (const seekTime of seekTimes) {
+        await new Promise<void>((resolve, reject) => {
+          video.onseeked = () => resolve();
+          video.onerror = () => reject(new Error('Video seek failed for color extraction.'));
+          video.currentTime = seekTime;
+        });
+        const hex = await extractHexFromVideoFrame(video);
+        if (hex) samples.push(hex);
+      }
+      return pickBrighterDominantHex(samples);
+    };
+
     const extractDominant = async () => {
-      if (!backgroundImage || backgroundMediaType === 'video') {
+      if (!backgroundImage) {
         setDominantColorHex(null);
         return;
       }
       try {
-        const img = new window.Image();
-        img.crossOrigin = 'anonymous';
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error('Could not load image for color extraction.'));
-          img.src = backgroundImage;
-        });
-        const color = await getColor(img, { quality: 10, ignoreWhite: false });
-        const hex = color?.hex?.()?.toUpperCase?.() ?? null;
-        if (!cancelled) setDominantColorHex(hex);
+        const hex = backgroundMediaType === 'video'
+          ? await extractFromVideo(backgroundImage)
+          : await extractFromImage(backgroundImage);
+        if (!cancelled) setDominantColorHex(hex ?? DOMINANT_COLOR_FALLBACK_HEX);
       } catch {
-        if (!cancelled) setDominantColorHex(null);
+        if (!cancelled) setDominantColorHex(DOMINANT_COLOR_FALLBACK_HEX);
       }
     };
     extractDominant();
@@ -495,6 +585,7 @@ export default function App() {
     setPhotoAnimationPreset('none');
     setPhotoAnimationDuration(2.0);
     setPhotoAnimationReplayTick(0);
+    setNameLayout('strip');
     setImageDimensions(null);
     setIsProfileTemplate(true);
     setSelectedTags([]);
@@ -512,7 +603,6 @@ export default function App() {
     setPhotoStrokeColor('#FFFFFF');
     setIsDarkMode(true);
     setDominantColorHex(null);
-    setDominantColorCopied(false);
     setTextStyle({ ...DEFAULT_TEXT_STYLE });
     setImageHolder(defaultImageHolder());
     setNameHolder(defaultNameHolder());
@@ -555,6 +645,7 @@ export default function App() {
       setPostLiveImmediately,
       setPostScheduleDateKey,
       setPostScheduleTimeHm,
+      setNameLayout,
     });
     setPersistReady(true);
     // Load background (image or video data URL) from IndexedDB — bypasses localStorage quota.
@@ -673,6 +764,7 @@ export default function App() {
         postLiveImmediately,
         postScheduleDateKey,
         postScheduleTimeHm,
+        nameLayout,
       });
       if (!saved && !quotaWarningShownRef.current) {
         quotaWarningShownRef.current = true;
@@ -706,6 +798,7 @@ export default function App() {
     postLiveImmediately,
     postScheduleDateKey,
     postScheduleTimeHm,
+    nameLayout,
   ]);
 
   // Height auto-tracks actual rendered font height (measured via DOM after fonts load).
@@ -801,8 +894,9 @@ export default function App() {
         lg: selectedLanguages,
         pn: postTitle,
         bg: file_url,
-        dc: dominantColorHex,
+        dc: dominantColorHexOrBlack(dominantColorHex),
         mt: backgroundMediaType,
+        nl: nameLayout,
         ia: (backgroundMediaType === 'video' && photoAnimationPreset !== 'none')
           ? { p: photoAnimationPreset, d: photoAnimationDuration, dl: 0 }
           : null,
@@ -877,9 +971,13 @@ export default function App() {
           img.src = src;
         });
 
+      const bgDesignH = canvasHeight;
+      const stripH = nameLayout === 'strip' ? stripDesignHeightPx(bgDesignH) : 0;
+      const totalDesignH = bgDesignH + stripH;
+
       const canvas = document.createElement('canvas');
       canvas.width = CANVAS_WIDTH;
-      canvas.height = canvasHeight;
+      canvas.height = totalDesignH;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Could not initialize canvas renderer.');
 
@@ -984,48 +1082,104 @@ export default function App() {
         }
       }
 
-      // Name text
-      const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
-      const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
-      const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
-      const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
-      const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
+      if (nameLayout === 'strip') {
+        // Name strip sits *below* the background region (attached, not overlapping).
+        // Typography matches overlay mode (`textStyle` / `np.st.ts`): font size, weight, color,
+        // alignment, stroke, shadow, letter spacing, max width band.
+        const stripY = bgDesignH;
+        ctx.save();
+        ctx.fillStyle = nameStripBackgroundHex(dominantColorHex);
+        ctx.fillRect(0, stripY, CANVAS_WIDTH, stripH);
 
-      ctx.save();
-      ctx.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${nameFontFamily}`;
-      ctx.textAlign = textStyle.textAlignment as CanvasTextAlign;
-      ctx.textBaseline = 'middle';
+        const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
+        const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
+        const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
+        const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
+        const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
 
-      const shadowPad = Math.max(safeShadow.blur + Math.max(Math.abs(safeShadow.offsetX), Math.abs(safeShadow.offsetY)), 0);
-      const totalPad = Math.max(safeStroke.width, shadowPad);
-      const contentLeft = nameHolder.x + totalPad + 6;
-      const contentRight = nameHolder.x + nameHolder.width - totalPad - 6;
-      const midY = nameHolder.y + nameHolder.height / 2;
-      const textX = textStyle.textAlignment === 'left'
-        ? contentLeft
-        : textStyle.textAlignment === 'right'
-          ? contentRight
-          : (contentLeft + contentRight) / 2;
+        ctx.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${nameFontFamily}`;
+        const ctxLs = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+        if ('letterSpacing' in ctxLs) {
+          ctxLs.letterSpacing = `${textStyle.letterSpacing}px`;
+        }
+        ctx.textBaseline = 'middle';
 
-      if (safeStroke.width > 0) {
-        const strokeOffsets = textStrokeToRNShadows(safeStroke);
-        strokeOffsets.forEach((s) => {
-          ctx.shadowOffsetX = s.textShadowOffset.width;
-          ctx.shadowOffsetY = s.textShadowOffset.height;
-          ctx.shadowBlur = 0;
-          ctx.shadowColor = s.textShadowColor;
-          ctx.fillStyle = safeTextColor;
-          ctx.fillText(userName, textX, midY);
-        });
+        const shadowPad = Math.max(safeShadow.blur + Math.max(Math.abs(safeShadow.offsetX), Math.abs(safeShadow.offsetY)), 0);
+        const totalPad = Math.max(safeStroke.width, shadowPad);
+        const bandWidth = (CANVAS_WIDTH * textStyle.maxWidthPercent) / 100;
+        const contentLeft = (CANVAS_WIDTH - bandWidth) / 2 + totalPad + 6;
+        const contentRight = (CANVAS_WIDTH + bandWidth) / 2 - totalPad - 6;
+        const midY = stripY + stripH / 2;
+        ctx.textAlign = textStyle.textAlignment as CanvasTextAlign;
+        const textX = textStyle.textAlignment === 'left'
+          ? contentLeft
+          : textStyle.textAlignment === 'right'
+            ? contentRight
+            : (contentLeft + contentRight) / 2;
+
+        if (safeStroke.width > 0) {
+          const strokeOffsets = textStrokeToRNShadows(safeStroke);
+          strokeOffsets.forEach((s) => {
+            ctx.shadowOffsetX = s.textShadowOffset.width;
+            ctx.shadowOffsetY = s.textShadowOffset.height;
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = s.textShadowColor;
+            ctx.fillStyle = safeTextColor;
+            ctx.fillText(userName, textX, midY);
+          });
+        }
+
+        ctx.shadowOffsetX = safeShadow.offsetX;
+        ctx.shadowOffsetY = safeShadow.offsetY;
+        ctx.shadowBlur = safeShadow.blur;
+        ctx.shadowColor = hexToRgba(safeShadow.color, safeShadow.opacity);
+        ctx.fillStyle = safeTextColor;
+        ctx.fillText(userName, textX, midY);
+        ctx.restore();
+      } else {
+        // Overlay (legacy): use the draggable name placeholder + text styling.
+        const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
+        const safeStrokeColor = normalizeHex(textStyle.textStroke.color, '#000000');
+        const safeShadowColor = normalizeHex(textStyle.textShadow.color, '#000000');
+        const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
+        const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
+
+        ctx.save();
+        ctx.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${nameFontFamily}`;
+        ctx.textAlign = textStyle.textAlignment as CanvasTextAlign;
+        ctx.textBaseline = 'middle';
+
+        const shadowPad = Math.max(safeShadow.blur + Math.max(Math.abs(safeShadow.offsetX), Math.abs(safeShadow.offsetY)), 0);
+        const totalPad = Math.max(safeStroke.width, shadowPad);
+        const contentLeft = nameHolder.x + totalPad + 6;
+        const contentRight = nameHolder.x + nameHolder.width - totalPad - 6;
+        const midY = nameHolder.y + nameHolder.height / 2;
+        const textX = textStyle.textAlignment === 'left'
+          ? contentLeft
+          : textStyle.textAlignment === 'right'
+            ? contentRight
+            : (contentLeft + contentRight) / 2;
+
+        if (safeStroke.width > 0) {
+          const strokeOffsets = textStrokeToRNShadows(safeStroke);
+          strokeOffsets.forEach((s) => {
+            ctx.shadowOffsetX = s.textShadowOffset.width;
+            ctx.shadowOffsetY = s.textShadowOffset.height;
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = s.textShadowColor;
+            ctx.fillStyle = safeTextColor;
+            ctx.fillText(userName, textX, midY);
+          });
+        }
+
+        ctx.shadowOffsetX = safeShadow.offsetX;
+        ctx.shadowOffsetY = safeShadow.offsetY;
+        ctx.shadowBlur = safeShadow.blur;
+        ctx.shadowColor = hexToRgba(safeShadow.color, safeShadow.opacity);
+        ctx.fillStyle = safeTextColor;
+        ctx.fillText(userName, textX, midY);
+        ctx.restore();
       }
-
-      ctx.shadowOffsetX = safeShadow.offsetX;
-      ctx.shadowOffsetY = safeShadow.offsetY;
-      ctx.shadowBlur = safeShadow.blur;
-      ctx.shadowColor = hexToRgba(safeShadow.color, safeShadow.opacity);
-      ctx.fillStyle = safeTextColor;
-      ctx.fillText(userName, textX, midY);
-      ctx.restore();
       };
 
       // Video: render composition frame-by-frame and record to webm
@@ -1048,7 +1202,7 @@ export default function App() {
           video.onerror = () => reject(new Error('Failed to load video'));
         });
 
-        const dstAspect = CANVAS_WIDTH / canvasHeight;
+        const dstAspect = CANVAS_WIDTH / bgDesignH;
         let sx = 0; let sy = 0; let sw = video.videoWidth; let sh = video.videoHeight;
         const srcAspect = video.videoWidth / video.videoHeight;
         if (srcAspect > dstAspect) {
@@ -1066,8 +1220,8 @@ export default function App() {
 
         let rafId: number | null = null;
         const drawFrame = () => {
-          ctx.clearRect(0, 0, CANVAS_WIDTH, canvasHeight);
-          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
+          ctx.clearRect(0, 0, CANVAS_WIDTH, totalDesignH);
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, bgDesignH);
           drawForegroundLayers(video.currentTime);
           if (video.duration > 0 && Number.isFinite(video.duration)) {
             const pct = Math.min(95, (video.currentTime / video.duration) * 95);
@@ -1107,7 +1261,7 @@ export default function App() {
       // Image: single-frame render to png
       const bg = await loadImage(backgroundImage);
       const srcAspect = bg.width / bg.height;
-      const dstAspect = CANVAS_WIDTH / canvasHeight;
+      const dstAspect = CANVAS_WIDTH / bgDesignH;
       let sx = 0; let sy = 0; let sw = bg.width; let sh = bg.height;
       if (srcAspect > dstAspect) {
         sw = bg.height * dstAspect;
@@ -1116,7 +1270,7 @@ export default function App() {
         sh = bg.width / dstAspect;
         sy = (bg.height - sh) / 2;
       }
-      ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, canvasHeight);
+      ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, CANVAS_WIDTH, bgDesignH);
       drawForegroundLayers(0);
 
       const dataUrl = canvas.toDataURL('image/png');
@@ -1154,6 +1308,8 @@ export default function App() {
     textStyle,
     userName,
     nameFontFamily,
+    nameLayout,
+    dominantColorHex,
   ]);
 
 
@@ -1366,6 +1522,7 @@ export default function App() {
                       selectedLanguages={selectedLanguages}
                       canvasWidth={CANVAS_WIDTH}
                       canvasHeight={canvasHeight}
+                      nameLayout={nameLayout}
                       onExport={handleExport}
                       onDownloadPost={handleDownloadRenderedImage}
                       isExporting={isExporting}
@@ -1394,6 +1551,7 @@ export default function App() {
             onNameHolderChange={setNameHolder}
             canvasWidth={CANVAS_WIDTH}
             canvasHeight={canvasHeight}
+            posterCanvasHeight={posterCanvasHeight}
             aspectRatio={aspectRatioString}
             userName={userName}
             fontSize={textStyle.fontSize}
@@ -1417,6 +1575,9 @@ export default function App() {
             photoAnimationPreset={photoAnimationPreset}
             photoAnimationDuration={photoAnimationDuration}
             photoAnimationReplayTick={photoAnimationReplayTick}
+            nameLayout={nameLayout}
+            dominantColorHex={dominantColorHex}
+            textMaxWidthPercent={textStyle.maxWidthPercent}
           />
         </main>
 
@@ -1463,7 +1624,7 @@ export default function App() {
                     {/* Shape */}
                     <div className="flex items-center justify-between">
                       <Label className="text-xs text-muted-foreground">Shape</Label>
-                      <div className="flex items-center rounded-md border border-border bg-muted/40 p-0.5 gap-0.5">
+                      <div className={segmentedToggleGroupClass}>
                         {([
                           { value: 'circle', icon: <Circle className="w-3 h-3" />, label: 'Circle' },
                           { value: 'square', icon: <Square className="w-3 h-3" />, label: 'Square' },
@@ -1472,11 +1633,7 @@ export default function App() {
                             key={value}
                             type="button"
                             onClick={() => setPhotoShape(value)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                              photoShape === value
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
-                            }`}
+                            className={segmentedToggleButtonClass(photoShape === value)}
                           >
                             {icon}{label}
                           </button>
@@ -1561,13 +1718,52 @@ export default function App() {
                   </div>
                 </PanelSection>
 
-                <PanelSection title="Text Style" icon={<Palette className="w-3.5 h-3.5" />}>
-                  <TextStyleEditor
-                    textStyle={textStyle}
-                    onChange={setTextStyle}
-                    userName={userName}
-                    onUserNameChange={setUserName}
-                  />
+                <PanelSection title="Name" icon={<Palette className="w-3.5 h-3.5" />}>
+                  <div className="space-y-4">
+                    {/* Layout toggle: Strip (default) vs Custom (overlay) — matches committed Shape control pattern */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Layout</Label>
+                      <div className={segmentedToggleGroupClass}>
+                        {([
+                          { value: 'strip' as const, label: 'Strip' },
+                          { value: 'overlay' as const, label: 'Custom' },
+                        ]).map(({ value, label }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setNameLayout(value)}
+                            className={segmentedToggleButtonClass(nameLayout === value)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {nameLayout === 'strip' ? (
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2">Display name</Label>
+                          <Input
+                            value={userName}
+                            onChange={(e) => setUserName(e.target.value)}
+                            placeholder="e.g. Vishwas HD"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Renders as a fixed bottom strip. Background uses the dominant color from your media. Switch to <b>Custom</b> for advanced font, stroke, shadow, position controls.
+                        </p>
+                      </div>
+                    ) : (
+                      <TextStyleEditor
+                        textStyle={textStyle}
+                        onChange={setTextStyle}
+                        userName={userName}
+                        onUserNameChange={setUserName}
+                      />
+                    )}
+                  </div>
                 </PanelSection>
 
               </>

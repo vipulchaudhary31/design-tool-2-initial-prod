@@ -45,6 +45,7 @@ export interface PosterStudioSessionPayload {
   postLiveImmediately: boolean;
   postScheduleDateKey: string;
   postScheduleTimeHm: string;
+  nameLayout: 'strip' | 'overlay';
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -177,6 +178,7 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
       postLiveImmediately: typeof data.postLiveImmediately === 'boolean' ? data.postLiveImmediately : false,
       postScheduleDateKey,
       postScheduleTimeHm,
+      nameLayout: data.nameLayout === 'overlay' ? 'overlay' : 'strip',
     };
   } catch {
     return null;

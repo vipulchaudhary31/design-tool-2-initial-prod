@@ -11,6 +11,7 @@ interface ExportPanelProps {
   selectedLanguages: string[];
   canvasWidth: number;
   canvasHeight: number;
+  nameLayout?: 'strip' | 'overlay';
   onExport: () => void;
   onDownloadPost: () => void;
   isExporting?: boolean;
@@ -30,6 +31,7 @@ export function ExportPanel({
   selectedLanguages,
   canvasWidth,
   canvasHeight,
+  nameLayout = 'strip',
   onExport,
   onDownloadPost,
   isExporting = false,
@@ -56,9 +58,11 @@ export function ExportPanel({
       label: 'Photo in bounds',
     },
     {
-      ok: nameHolder.x >= 0 && nameHolder.y >= 0 &&
+      ok: nameLayout === 'strip' || (
+        nameHolder.x >= 0 && nameHolder.y >= 0 &&
         nameHolder.x + nameHolder.width <= canvasWidth &&
-        nameHolder.y + nameHolder.height <= canvasHeight,
+        nameHolder.y + nameHolder.height <= canvasHeight
+      ),
       label: 'Name in bounds',
     },
   ];

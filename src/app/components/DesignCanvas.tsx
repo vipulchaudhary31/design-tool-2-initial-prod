@@ -9,6 +9,7 @@ import type { Rect, SnapGuide, DistanceIndicator } from './snap-engine';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
+import { stripDesignHeightPx, nameStripBackgroundHex } from '@/utils/nameStripStyle';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
@@ -47,6 +48,12 @@ interface DesignCanvasProps {
   photoAnimationPreset?: PhotoAnimationPreset;
   photoAnimationDuration?: number;
   photoAnimationReplayTick?: number;
+  nameLayout?: 'strip' | 'overlay';
+  dominantColorHex?: string | null;
+  /** Full poster height incl. strip (design px); defaults to `canvasHeight`. */
+  posterCanvasHeight?: number;
+  /** Max width % for strip text (same as overlay `maxWidthPercent`). */
+  textMaxWidthPercent?: number;
 }
 
 const MAX_CANVAS_HEIGHT = 640;
@@ -69,7 +76,7 @@ export function DesignCanvas({
   canvasHeight,
   userName = 'User Name',
   fontSize = 48,
-  fontWeight = 600,
+  fontWeight = 700,
   textColor = '#FFFFFF',
   textShadow = { offsetX: 0, offsetY: 0, blur: 0, color: '#000000', opacity: 0 },
   textStroke = { width: 0, color: '#000000' },
@@ -89,7 +96,12 @@ export function DesignCanvas({
   photoAnimationPreset = 'none',
   photoAnimationDuration = 2.0,
   photoAnimationReplayTick = 0,
+  nameLayout = 'strip',
+  dominantColorHex = null,
+  posterCanvasHeight,
+  textMaxWidthPercent = 80,
 }: DesignCanvasProps) {
+  const posterH = posterCanvasHeight ?? canvasHeight;
   const [scale, setScale] = useState(1);
   const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | null>(null);
   const [videoMuted, setVideoMuted] = useState(true);
@@ -121,7 +133,7 @@ export function DesignCanvas({
 
   useEffect(() => {
     const calc = () => {
-      const hs = MAX_CANVAS_HEIGHT / canvasHeight;
+      const hs = MAX_CANVAS_HEIGHT / posterH;
       const cw = containerRef.current?.clientWidth ?? window.innerWidth * 0.5;
       const ws = cw / canvasWidth;
       setScale(Math.min(hs, ws));
@@ -132,7 +144,7 @@ export function DesignCanvas({
     if (el) { ro = new ResizeObserver(calc); ro.observe(el); }
     window.addEventListener('resize', calc);
     return () => { window.removeEventListener('resize', calc); ro?.disconnect(); };
-  }, [canvasWidth, canvasHeight]);
+  }, [canvasWidth, posterH]);
 
   // ══════════════ KEYBOARD HANDLER (single, stable) ══════════════
   useEffect(() => {
@@ -305,7 +317,7 @@ export function DesignCanvas({
 
     return (
       <svg
-        className="absolute inset-0 pointer-events-none z-50"
+        className="absolute top-0 left-0 pointer-events-none z-50"
         width={w}
         height={h}
         viewBox={`0 0 ${w} ${h}`}
@@ -407,14 +419,19 @@ export function DesignCanvas({
         className="relative rounded-md overflow-hidden"
         style={{
           width: canvasWidth * scale,
-          height: canvasHeight * scale,
+          height: posterH * scale,
           boxShadow: backgroundImage ? '0 0 0 1px rgba(0,0,0,0.08), 0 20px 60px rgba(0,0,0,0.25)' : undefined,
           background: backgroundImage ? undefined : 'var(--card)',
           border: backgroundImage ? undefined : '1px dashed var(--border)',
         }}
       >
-        {/* Background media — clipped separately so layer badges can overflow */}
-        <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none">
+        {/* Background media — only occupies the poster area above the name strip */}
+        <div
+          className={`absolute top-0 left-0 overflow-hidden pointer-events-none ${
+            nameLayout === 'strip' ? 'rounded-t-md' : 'rounded-md'
+          }`}
+          style={{ width: canvasWidth * scale, height: canvasHeight * scale }}
+        >
           {backgroundImage && mediaType === 'video' && (
             <video
               ref={videoRef}
@@ -438,7 +455,12 @@ export function DesignCanvas({
             type="button"
             aria-label={videoMuted ? 'Unmute video' : 'Mute video'}
             onClick={() => setVideoMuted(m => !m)}
-            className="absolute bottom-2 right-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors pointer-events-auto"
+            className="absolute right-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors pointer-events-auto"
+            style={{
+              bottom: nameLayout === 'strip'
+                ? stripDesignHeightPx(canvasHeight) * scale + 8
+                : 8,
+            }}
           >
             {videoMuted
               ? <VolumeX className="w-3.5 h-3.5" />
@@ -488,23 +510,83 @@ export function DesignCanvas({
                   : undefined
               }
             />
-            <DraggablePlaceholder
-              type="rectangle"
-              x={nameHolder.x} y={nameHolder.y} width={nameHolder.width} height={nameHolder.height}
-              canvasScale={scale} label={userName} fontSize={fontSize} fontWeight={fontWeight}
-              textColor={textColor} textShadow={textShadow} textStroke={textStroke}
-              canvasWidth={canvasWidth} canvasHeight={canvasHeight}
-              onDrag={(x, y) => onNameHolderChange({ ...nameHolder, x, y })}
-              onRectChange={(x, y, w, h) => onNameHolderChange({ x, y, width: w, height: h })}
-              minRectWidth={Math.round(canvasWidth * 0.50)} maxRectWidth={canvasWidth}
-              minRectHeight={minNameRectHeight} maxRectHeight={maxNameRectHeight}
-              textAlignment={textAlignment} letterSpacing={letterSpacing} textFontFamily={textFontFamily}
-              isSelected={selectedLayer === 'text'}
-              onSelect={() => setSelectedLayer('text')}
-              otherRects={otherRectsForText}
-              onActiveGuides={handleTextGuides}
-              onDragRect={handleTextDragRect}
-            />
+            {nameLayout === 'overlay' && (
+              <DraggablePlaceholder
+                type="rectangle"
+                x={nameHolder.x} y={nameHolder.y} width={nameHolder.width} height={nameHolder.height}
+                canvasScale={scale} label={userName} fontSize={fontSize} fontWeight={fontWeight}
+                textColor={textColor} textShadow={textShadow} textStroke={textStroke}
+                canvasWidth={canvasWidth} canvasHeight={canvasHeight}
+                onDrag={(x, y) => onNameHolderChange({ ...nameHolder, x, y })}
+                onRectChange={(x, y, w, h) => onNameHolderChange({ x, y, width: w, height: h })}
+                minRectWidth={Math.round(canvasWidth * 0.50)} maxRectWidth={canvasWidth}
+                minRectHeight={minNameRectHeight} maxRectHeight={maxNameRectHeight}
+                textAlignment={textAlignment} letterSpacing={letterSpacing} textFontFamily={textFontFamily}
+                isSelected={selectedLayer === 'text'}
+                onSelect={() => setSelectedLayer('text')}
+                otherRects={otherRectsForText}
+                onActiveGuides={handleTextGuides}
+                onDragRect={handleTextDragRect}
+              />
+            )}
+
+            {nameLayout === 'strip' && (() => {
+              const stripHeightPx = stripDesignHeightPx(canvasHeight) * scale;
+              const stripBg = nameStripBackgroundHex(dominantColorHex);
+              const scaledCombinedShadow = buildCombinedTextShadow(
+                {
+                  ...textShadow,
+                  offsetX: textShadow.offsetX * scale,
+                  offsetY: textShadow.offsetY * scale,
+                  blur: textShadow.blur * scale,
+                },
+                { ...textStroke, width: textStroke.width * scale },
+              );
+              const strokePad = textStroke.width;
+              const shadowPad = Math.max(
+                textShadow.blur + Math.max(Math.abs(textShadow.offsetX), Math.abs(textShadow.offsetY)),
+                0,
+              );
+              const totalPad = Math.max(strokePad, shadowPad);
+              const scaledPad = totalPad * scale;
+              const justify =
+                textAlignment === 'left' ? 'flex-start' : textAlignment === 'right' ? 'flex-end' : 'center';
+              return (
+                <div
+                  className="absolute left-0 right-0 bottom-0 flex items-center pointer-events-none select-none overflow-hidden"
+                  style={{
+                    height: stripHeightPx,
+                    backgroundColor: stripBg,
+                    padding: `${12 * scale}px ${scaledPad + 6 * scale}px`,
+                    justifyContent: justify,
+                  }}
+                >
+                  <span
+                    className="relative z-10"
+                    style={{
+                      fontFamily: textFontFamily,
+                      color: textColor,
+                      fontWeight,
+                      fontSize: fontSize * scale,
+                      lineHeight: 'normal',
+                      textShadow: scaledCombinedShadow,
+                      textAlign: textAlignment,
+                      letterSpacing: `${letterSpacing * scale}px`,
+                      maxWidth: `${textMaxWidthPercent}%`,
+                      whiteSpace: 'nowrap',
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      WebkitFontSmoothing: 'antialiased',
+                      MozOsxFontSmoothing: 'grayscale',
+                      textRendering: 'optimizeLegibility',
+                    }}
+                  >
+                    {userName}
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Snap guide + distance overlay */}
             {renderOverlay()}

@@ -15,8 +15,11 @@ export type CompactTemplateJSON = {
   pn: string;
   /** backgroundImage (data URL) or null */
   bg: string | null;
-  /** dominantColorHex from background image (e.g. "#E84393") */
-  dc: string | null;
+  /**
+   * dominantColorHex from background media (`#RRGGBB`).
+   * Studio always sends `#000000` when extraction fails or colour is invalid.
+   */
+  dc: string;
   /** mediaType: "image" | "video" */
   mt: 'image' | 'video';
   /** publishLiveImmediately — when true the post becomes visible once saved/processed */
@@ -45,6 +48,22 @@ export type CompactTemplateJSON = {
     /** strokeColor (normalized hex) */
     sc: string;
   };
+  /**
+   * Name layout mode.
+   * - "strip"   = fixed full-width strip below the background with text from `pn`.
+   *              Ignore `np.x` / `np.y` / `np.w` / `np.h` for layout. Use `np.st.ts`
+   *              for typography (same fields as overlay: `fs`, `fw`, `c`, `ls`, `sh`,
+   *              `st`, `ta`). Strip height = `round(backgroundHeight × 0.065)` (6.5%).
+   *              Strip background = black mixed 50% with `dc` (RGB = dc/2).
+   *              Max text width: **80%** of canvas (not currently a separate JSON key;
+   *              matches studio default `maxWidthPercent`).
+   * - "overlay" = render `np` exactly as positioned/styled in the editor (legacy).
+   *
+   * Default for new templates is "strip".
+   * Older payloads without this field should be treated as "overlay" for backward
+   * compatibility.
+   */
+  nl: 'strip' | 'overlay';
   /**
    * Photo/image placeholder animation — only set when mt === "video".
    * null when no animation is selected or background is an image.
@@ -152,5 +171,6 @@ export const TEMPLATE_KEY_MAP = {
   ia_p: 'imageAnimation.preset',
   ia_d: 'imageAnimation.durationSeconds',
   ia_dl: 'imageAnimation.delaySeconds',
+  nl: 'nameLayout',
 } as const;
 

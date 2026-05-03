@@ -32,9 +32,18 @@ interface TemplateJSONFull {
    */
   scheduledAt: string | null;
   backgroundImage: string | null;
-  /** Dominant colour sampled from the background in the editor (e.g. "#E84393"). */
+  /**
+   * Dominant colour `#RRGGBB` sampled from the background **image or video** in the editor.
+   * Current Poster Studio always sends a string; **`#000000`** when extraction fails.
+   * Legacy rows may have `null` — consumers should treat as `#000000` for strip parity.
+   */
   dominantColorHex: string | null;
   mediaType: 'image' | 'video';
+  /**
+   * "strip": bottom strip + `postName`; ignore name band **geometry** (`x/y/w/h`);
+   * still apply **`namePlaceholder.styling.textStyle`** to strip typography. Strip height ≈ **6.5%** of background.
+   */
+  nameLayout: 'strip' | 'overlay';
   imageAnimation: ImageAnimation | null;
   imagePlaceholder: ImagePlaceholder;
   namePlaceholder: NamePlaceholder;
@@ -51,8 +60,9 @@ interface TemplateJSONFull {
 | `publishLiveImmediately` | boolean               | **`true`** = visible as soon as the template/post is activated on the backend; **`false`** = use `scheduledAt`. |
 | `scheduledAt`       | string \| **`null`**        | ISO 8601 **UTC** for go-live time when not immediate (e.g. `"2026-05-03T06:30:00.000Z"`). **`null`** when immediate. |
 | `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png`/`.webp` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
-| `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image** in the editor. Always **`null`** for video backgrounds. |
+| `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image or video** in the editor. **Current studio** always persists a string ( **`#000000`** on failure ). **`null`** may appear on older templates — treat like **`#000000`** when rendering the strip. |
 | `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPEG/PNG/WebP raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
+| `nameLayout`        | `'strip'` \| `'overlay'`    | **`"strip"`** = fixed bottom strip with `postName`; ignore **`namePlaceholder` x/y/w/h**; apply **`styling.textStyle`** to strip text (same semantics as overlay). Strip height ≈ **6.5%** of background band. **`"overlay"`** = full `namePlaceholder` layout + styling. Default `"strip"`; missing → treat as `"overlay"`. |
 | `imageAnimation`    | `ImageAnimation` \| null    | Photo intro animation for video templates. `null` for image templates or when disabled. |
 | `imagePlaceholder`  | `ImagePlaceholder`          | Photo frame position/shape/border config                          |
 | `namePlaceholder`   | `NamePlaceholder`           | Name text band position + text styling                            |
@@ -221,8 +231,9 @@ field path they map to in the logical model above.
 | `li`        | `publishLiveImmediately` | Immediate vs scheduled publishing                                |
 | `sa`        | `scheduledAt`        | ISO 8601 UTC go-live instant, or **`null`** when `li === true`  |
 | `bg`        | `backgroundImage`    | **Storage key** for the uploaded background (or `data:` / full URL in legacy flows), or `null` |
-| `dc`        | `dominantColorHex`   | Dominant background colour `#RRGGBB`, or `null`                  |
+| `dc`        | `dominantColorHex`   | Dominant background colour `#RRGGBB` (studio: always string, **`#000000`** if sampling fails). Legacy: `null` ok |
 | `mt`        | `mediaType`          | Media type for `backgroundImage`: `"image"` or `"video"`         |
+| `nl`        | `nameLayout`         | Name layout mode (`"strip"` or `"overlay"`); see semantics above |
 | `ia`        | `imageAnimation`     | Photo intro animation payload (video templates only)             |
 | `ip`        | `imagePlaceholder`   | Image (photo) placeholder object                                 |
 | `np`        | `namePlaceholder`    | Name text placeholder object                                     |
@@ -315,8 +326,9 @@ When `w === 0`, there is effectively **no stroke**.
 - **`li` / `sa` (`publishLiveImmediately` / `scheduledAt`):** when `li` is `true`, expose the template/post as soon as it is persisted; when `false`, hold visibility until **`sa`** (parse as UTC ISO instant). Prefer **`sa === null`** when `li === true`.
 - **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production. File extension reflects the type (`.mp4` for video).
 - **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
+- **`nl` / `nameLayout`:** persist as-is. When `"strip"`, ignore **`np` geometry** (`x`,`y`,`w`,`h`) and render the bottom strip using **`postName`** + **`np.st.ts`** for typography (≈ **6.5%** strip height, **80%** max text width default). When `"overlay"`, render full `np` as before.
 - **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
-- **`dc` / `dominantColorHex`:** always `null` for video backgrounds; optional for images. Safe to index as a string or `null`.
+- **`dc` / `dominantColorHex`:** sampled from **images and videos** in the editor (video: up to two frame samples, brighter result preferred). **Current export** always includes a hex string; failures normalize to **`#000000`**. Legacy payloads may store `null` — backends and clients should coerce to **`#000000`** for strip rendering. Used by **`nl === "strip"`** (strip = black mixed 50% with dominant).
 - **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  
   `TEMPLATE_JSON_SCHEMA_FRONTEND.md` (frontend guide); this backend document
@@ -327,13 +339,15 @@ When `w === 0`, there is effectively **no stroke**.
 ### 9. Changelog
 
 #### May 2026
-- **Video support:** `mt` can now be `"video"` (MP4). `bg` key ends in `.mp4`. `dc` is always `null` for video. `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
+- **Video support:** `mt` can be `"video"` (MP4). `bg` key ends in `.mp4`. **`dc` / `dominantColorHex`** are populated for **video** templates the same way as images (see quick summary). `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
 - **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`, `ia.dl`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
+- **Name layout (`nl`):** `"strip"` (default) = bottom strip with `postName` + **`namePlaceholder.styling`** for type; **ignore band x/y/w/h**; strip ≈ **6.5%** of background height. `"overlay"` = full name placeholder. Missing `nl` → `"overlay"`.
+- **Dominant colour (`dc`) for video:** extracted for video backgrounds (multi-frame sampling in studio when possible). Failures map to **`#000000`** in new exports; strip fallback uses the same semantics as the frontend doc.
 
 #### April 2026 (vs March 2026 baseline)
 - **`pn` → `postName`:** mandatory post title — mirrors **`title`** on template create requests.
 - **`li` / `sa` → `publishLiveImmediately` / `scheduledAt`:** post visibility — immediate (`sa: null`) vs scheduled UTC instant.
-- **`dc` → `dominantColorHex`:** new optional field.
+- **`dc` → `dominantColorHex`:** dominant colour for theming / strip; current studio requires a `#RRGGBB` string ( **`#000000`** on failure ).
 - **`bg`:** production payloads use **object storage keys** after presigned upload; older docs assumed inline data URLs.
 - **`np`:** `x`, `w`, and `h` are always present in compact JSON (name band is fully specified).
 
