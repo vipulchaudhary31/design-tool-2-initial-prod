@@ -6,7 +6,6 @@ interface TagSelectorProps {
   availableTags: string[];
   selectedTags: string[];
   onTagsChange: (tags: string[]) => void;
-  required?: boolean;
 }
 
 export function TagSelector({
@@ -14,7 +13,6 @@ export function TagSelector({
   availableTags,
   selectedTags,
   onTagsChange,
-  required = false,
 }: TagSelectorProps) {
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -29,7 +27,6 @@ export function TagSelector({
       <div className="flex items-center justify-between">
         <Label className="text-xs text-muted-foreground">
           {title}
-          {required && selectedTags.length === 0 && <span className="text-destructive ml-0.5">*</span>}
         </Label>
         {selectedTags.length > 0 && (
           <span className="text-[10px] text-primary">{selectedTags.length} selected</span>

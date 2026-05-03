@@ -12,7 +12,7 @@ function formatFileSize(bytes: number): string {
 }
 
 interface ImageUploaderProps {
-  onImageUpload: (imageUrl: string) => void;
+  onImageUpload: (imageUrl: string, fileMeta?: { name?: string }) => void;
   hasImage: boolean;
 }
 
@@ -36,7 +36,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
     }
     const reader = new FileReader();
     reader.onloadend = () => {
-      onImageUpload(reader.result as string);
+      onImageUpload(reader.result as string, { name: file.name });
     };
     reader.readAsDataURL(file);
     inputEl.value = '';
@@ -75,8 +75,8 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
           </div>
         </button>
       ) : (
-        <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/60">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-chart-2/15 text-chart-2">
+        <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/45">
+          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-primary/[0.055] text-primary/75">
             <ImageIcon className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
@@ -86,8 +86,9 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-muted-foreground"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
             type="button"
+            title="Change background"
             onClick={openPick}
           >
             <RefreshCw className="w-3.5 h-3.5" />

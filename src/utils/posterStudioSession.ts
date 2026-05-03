@@ -4,6 +4,7 @@
  */
 
 import type { TextStyle } from '@/app/components/TextStyleEditor';
+import { defaultScheduleDateKey } from '@/utils/postSchedule';
 
 const STORAGE_KEY = 'poster-studio-session-v1';
 const SCHEMA_VERSION = 1;
@@ -39,6 +40,10 @@ export interface PosterStudioSessionPayload {
   textStyle: TextStyle;
   imageHolder: ImagePlaceholderPersisted;
   nameHolder: NamePlaceholderPersisted;
+  postName: string;
+  postLiveImmediately: boolean;
+  postScheduleDateKey: string;
+  postScheduleTimeHm: string;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -134,6 +139,15 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
       maxWidthPercent: textStyle.maxWidthPercent as number,
     };
 
+    const postScheduleDateKey =
+      typeof data.postScheduleDateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.postScheduleDateKey)
+        ? data.postScheduleDateKey
+        : defaultScheduleDateKey();
+    const postScheduleTimeHm =
+      typeof data.postScheduleTimeHm === 'string' && /^\d{2}:\d{2}$/.test(data.postScheduleTimeHm)
+        ? data.postScheduleTimeHm
+        : '09:00';
+
     return {
       v: SCHEMA_VERSION,
       backgroundImage: strOrNull('backgroundImage'),
@@ -157,6 +171,10 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
         width: nh.width as number,
         height: nh.height as number,
       },
+      postName: typeof data.postName === 'string' ? data.postName : '',
+      postLiveImmediately: typeof data.postLiveImmediately === 'boolean' ? data.postLiveImmediately : false,
+      postScheduleDateKey,
+      postScheduleTimeHm,
     };
   } catch {
     return null;

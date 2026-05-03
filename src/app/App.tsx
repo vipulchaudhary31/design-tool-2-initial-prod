@@ -1,7 +1,7 @@
 // Local placeholders (figma:asset imports replaced for running outside Figma)
 // Use BASE_URL so assets work on GitHub Pages (e.g. /Lokalposterstudio/)
 const baseUrl = import.meta.env.BASE_URL;
-const image_c92d52e8598ae346d604fac2120bd87eab98c2a9 = `${baseUrl}placeholder-logo.png`;
+const faviconHref = `${baseUrl}favicon.png`;
 const samplePhotoBg = `${baseUrl}assets/sample-photo-bg.png`;
 const samplePhotoNoBg = `${baseUrl}assets/sample-photo-nobg.png`;
 import {
@@ -28,6 +28,7 @@ import {
   getNameFontFamilyForLabel,
 } from '@/app/components/TextStyleEditor';
 import { ExportPanel } from '@/app/components/ExportPanel';
+import { PostDetailsSection } from '@/app/components/PostDetailsSection';
 import { getColor } from 'colorthief';
 import { Toaster } from '@/app/components/ui/sonner';
 import { toast } from 'sonner';
@@ -55,12 +56,16 @@ import {
   clearPosterStudioSession,
   type PosterStudioSessionPayload,
 } from '@/utils/posterStudioSession';
+import { defaultScheduleDateKey, localYmdHmToISO } from '@/utils/postSchedule';
+import { defaultPostNameFromImageFilename } from '@/utils/postNameFromFile';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
-  Upload, Tags, Download, User, Circle, Square,
-  ChevronRight, ImageIcon, X, Palette,
+  Tags, Download, User, Circle, Square,
+  ChevronRight, ImageIcon, Palette,
   SlidersHorizontal, AlertCircle, LogOut, Loader2,
+  CalendarClock,
 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface ImagePlaceholder {
   x: number;
@@ -157,6 +162,10 @@ function applyPosterSnapshot(
     setTextStyle: Dispatch<SetStateAction<TextStyle>>;
     setImageHolder: Dispatch<SetStateAction<ImagePlaceholder>>;
     setNameHolder: Dispatch<SetStateAction<NamePlaceholder>>;
+    setPostName: (v: string) => void;
+    setPostLiveImmediately: (v: boolean) => void;
+    setPostScheduleDateKey: (v: string) => void;
+    setPostScheduleTimeHm: (v: string) => void;
   },
 ) {
   apply.setBackgroundImage(snap.backgroundImage);
@@ -175,31 +184,37 @@ function applyPosterSnapshot(
   apply.setTextStyle(snap.textStyle);
   apply.setImageHolder(snap.imageHolder);
   apply.setNameHolder(snap.nameHolder);
+  apply.setPostName(snap.postName);
+  apply.setPostLiveImmediately(snap.postLiveImmediately);
+  apply.setPostScheduleDateKey(snap.postScheduleDateKey);
+  apply.setPostScheduleTimeHm(snap.postScheduleTimeHm);
 }
 
 /* ── Collapsible panel section ─────────────────────────────────────── */
-function PanelSection({ title, icon, children, defaultOpen = true, badge }: {
+function PanelSection({ title, icon, children, defaultOpen = true, badge, muted = false, showSeparator = true }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
   badge?: React.ReactNode;
+  muted?: boolean;
+  showSeparator?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
         <button className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-secondary/50 transition-colors group">
-          <span className="text-muted-foreground" style={{ position: 'relative', top: '-0.5px' }}>{icon}</span>
-          <span className="text-[13px] tracking-wide text-foreground flex-1">{title}</span>
+          <span className={`text-muted-foreground${muted ? ' opacity-50' : ''}`} style={{ position: 'relative', top: '-0.5px' }}>{icon}</span>
+          <span className={`text-[13px] tracking-wide flex-1${muted ? ' text-muted-foreground opacity-60' : ' text-foreground'}`}>{title}</span>
           {badge}
-          <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+          <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90' : ''}${muted ? ' opacity-50' : ''}`} />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="px-[16px] pt-1 pb-4">{children}</div>
       </CollapsibleContent>
-      <Separator />
+      {showSeparator && <Separator />}
     </Collapsible>
   );
 }
@@ -291,6 +306,10 @@ export default function App() {
   const [isProfileTemplate, setIsProfileTemplate] = useState<boolean>(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [postName, setPostName] = useState('');
+  const [postLiveImmediately, setPostLiveImmediately] = useState(false);
+  const [postScheduleDateKey, setPostScheduleDateKey] = useState(() => defaultScheduleDateKey());
+  const [postScheduleTimeHm, setPostScheduleTimeHm] = useState('09:00');
   const [userName, setUserName] = useState<string>('Srinivasalu Reddy');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [photoShape, setPhotoShape] = useState<'circle' | 'square'>('circle');
@@ -305,7 +324,6 @@ export default function App() {
   }, [isDarkMode]);
 
   const [dominantColorHex, setDominantColorHex] = useState<string | null>(null);
-  const [dominantColorCopied, setDominantColorCopied] = useState<boolean>(false);
   const nameFontFamily = getNameFontFamilyForLabel(userName);
 
   /* ── Fetch tag data whenever logged in; splash waits until both finish ── */
@@ -328,12 +346,12 @@ export default function App() {
     document.title = 'Posters Studio';
     const existingFavicon = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
     if (existingFavicon) {
-      existingFavicon.href = image_c92d52e8598ae346d604fac2120bd87eab98c2a9;
+      existingFavicon.href = faviconHref;
     } else {
       const link = document.createElement('link');
       link.rel = 'icon';
       link.type = 'image/png';
-      link.href = image_c92d52e8598ae346d604fac2120bd87eab98c2a9;
+      link.href = faviconHref;
       document.head.appendChild(link);
     }
   }, []);
@@ -360,7 +378,7 @@ export default function App() {
     ? computeAspectRatioString(imageDimensions.width, imageDimensions.height)
     : '';
 
-  const handleImageUpload = (imageUrl: string) => {
+  const handleImageUpload = (imageUrl: string, fileMeta?: { name?: string }) => {
     const validateAndSet = (srcWidth: number, srcHeight: number) => {
       const normalizedHeight = Math.round((CANVAS_WIDTH / srcWidth) * srcHeight);
       const matched = ALLOWED_CANVAS_SIZES.find(
@@ -374,6 +392,9 @@ export default function App() {
       }
       setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
       setBackgroundImage(imageUrl);
+      if (fileMeta?.name?.trim()) {
+        setPostName(defaultPostNameFromImageFilename(fileMeta.name));
+      }
     };
     const img = new window.Image();
     img.onload = () => validateAndSet(img.naturalWidth, img.naturalHeight);
@@ -438,6 +459,34 @@ export default function App() {
     });
   }, [aspectRatioString, canvasHeight]);
 
+  /** Clear in-memory workspace so logout → login starts fresh (localStorage alone is insufficient while the app stays mounted). */
+  const resetStudioWorkspaceToBlank = useCallback(() => {
+    setBackgroundImage(null);
+    setImageDimensions(null);
+    setIsProfileTemplate(true);
+    setSelectedTags([]);
+    setSelectedLanguages([]);
+    setPostName('');
+    setPostLiveImmediately(false);
+    setPostScheduleDateKey(defaultScheduleDateKey());
+    setPostScheduleTimeHm('09:00');
+    setUserName('Srinivasalu Reddy');
+    setUserPhoto(null);
+    setPhotoShape('circle');
+    setPhotoCornerRadius(16);
+    setPhotoHasBackground(false);
+    setPhotoStrokeWidth(0);
+    setPhotoStrokeColor('#FFFFFF');
+    setIsDarkMode(true);
+    setDominantColorHex(null);
+    setDominantColorCopied(false);
+    setTextStyle({ ...DEFAULT_TEXT_STYLE });
+    setImageHolder(defaultImageHolder());
+    setNameHolder(defaultNameHolder());
+    setIsExporting(false);
+    setShowEasterEgg(false);
+  }, []);
+
   /* ── Hydrate workspace from localStorage after login ── */
   useEffect(() => {
     if (!isLoggedIn) {
@@ -446,6 +495,7 @@ export default function App() {
     }
     const snap = loadPosterStudioSession();
     if (!snap) {
+      resetStudioWorkspaceToBlank();
       setPersistReady(true);
       return;
     }
@@ -466,9 +516,13 @@ export default function App() {
       setTextStyle,
       setImageHolder,
       setNameHolder,
+      setPostName,
+      setPostLiveImmediately,
+      setPostScheduleDateKey,
+      setPostScheduleTimeHm,
     });
     setPersistReady(true);
-  }, [isLoggedIn]);
+  }, [isLoggedIn, resetStudioWorkspaceToBlank]);
 
   /* ── Fonts: splash waits until webfonts needed by the canvas can render ── */
   useEffect(() => {
@@ -572,6 +626,10 @@ export default function App() {
         textStyle,
         imageHolder,
         nameHolder,
+        postName,
+        postLiveImmediately,
+        postScheduleDateKey,
+        postScheduleTimeHm,
       });
       if (!saved && !quotaWarningShownRef.current) {
         quotaWarningShownRef.current = true;
@@ -600,6 +658,10 @@ export default function App() {
     textStyle,
     imageHolder,
     nameHolder,
+    postName,
+    postLiveImmediately,
+    postScheduleDateKey,
+    postScheduleTimeHm,
   ]);
 
   // Height auto-tracks actual rendered font height (measured via DOM after fonts load).
@@ -627,6 +689,28 @@ export default function App() {
     if (selectedLanguages.length === 0) {
       toast.error('Select at least 1 language.', { description: 'Pick a language before exporting.' });
       return;
+    }
+
+    const postTitle = postName.trim();
+    if (!postTitle) {
+      toast.error('Post name required', { description: 'Enter a post name under Post details (it defaults from your image).' });
+      return;
+    }
+
+    let scheduledAtIso: string | null = null;
+    if (!postLiveImmediately) {
+      try {
+        scheduledAtIso = localYmdHmToISO(postScheduleDateKey, postScheduleTimeHm || '09:00');
+      } catch {
+        toast.error('Invalid schedule', { description: 'Choose a valid date and time.' });
+        return;
+      }
+      if (new Date(scheduledAtIso).getTime() <= Date.now()) {
+        toast.error('Schedule this post later', {
+          description: 'Pick a date and time that is strictly in the future.',
+        });
+        return;
+      }
     }
 
     setIsExporting(true);
@@ -664,9 +748,12 @@ export default function App() {
         t: isProfileTemplate,
         pc: selectedTags,
         lg: selectedLanguages,
+        pn: postTitle,
         bg: file_url,
         dc: dominantColorHex,
         mt: 'image',
+        li: postLiveImmediately,
+        sa: scheduledAtIso,
         ip: {
           x: Math.round((imageHolder.x / CANVAS_WIDTH) * 100),
           y: Math.round((imageHolder.y / canvasHeight) * 100),
@@ -711,7 +798,7 @@ export default function App() {
       };
 
       // 5. Create poster template (sent to backend). No local JSON download.
-      await createPosterTemplate({ title: `template-${ts}`, raw_config });
+      await createPosterTemplate({ title: postTitle, raw_config });
       toast.success('Template exported!', { description: 'Saved to backend.' });
     } catch (err) {
       toast.error('Export failed', { description: err instanceof Error ? err.message : 'Please try again.' });
@@ -876,28 +963,7 @@ export default function App() {
     userName,
   ]);
 
-  const handleCopyDominantColor = useCallback(async () => {
-    if (!dominantColorHex) return;
-    try {
-      await navigator.clipboard.writeText(dominantColorHex);
-      setDominantColorCopied(true);
-      window.setTimeout(() => setDominantColorCopied(false), 1200);
-    } catch {
-      toast.error('Could not copy color code.');
-    }
-  }, [dominantColorHex]);
 
-  const currentStep = !backgroundImage
-    ? 1
-    : (selectedTags.length === 0 || selectedLanguages.length === 0)
-      ? 2
-      : 3;
-
-  const steps = [
-    { n: 1, label: 'Upload', icon: Upload },
-    { n: 2, label: 'Tags', icon: Tags },
-    { n: 3, label: 'Export', icon: Download },
-  ];
 
   /* ================= UI ================= */
   return (
@@ -917,24 +983,7 @@ export default function App() {
           <span className="text-sm text-foreground tracking-tight">Posters Studio</span>
         </div>
 
-        <nav className="flex items-center gap-0.5">
-          {steps.map((s, i) => {
-            const Icon = s.icon;
-            const done = currentStep > s.n;
-            const active = currentStep === s.n;
-            return (
-              <div key={s.n} className="flex items-center">
-                {i > 0 && <div className={`w-5 h-px mx-1 ${done ? 'bg-primary/50' : 'bg-border'}`} />}
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors ${
-                  active ? 'bg-primary/15 text-primary' : done ? 'text-primary/50' : 'text-muted-foreground'
-                }`}>
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{s.label}</span>
-                </div>
-              </div>
-            );
-          })}
-        </nav>
+        <div />
 
         <div className="flex items-center gap-3">
           {imageDimensions && (
@@ -948,6 +997,7 @@ export default function App() {
             size="sm"
             onClick={() => {
               clearPosterStudioSession();
+              resetStudioWorkspaceToBlank();
               clearToken();
               setIsLoggedIn(false);
               setPersistReady(false);
@@ -980,7 +1030,8 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Panel ── */}
         <aside className="w-[272px] shrink-0 bg-card border-r border-border flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto pb-10">
+            {/* Background section — always visible, this is the first action */}
             <PanelSection title="Background" icon={<ImageIcon className="w-3.5 h-3.5" />}>
               <ImageUploader
                 onImageUpload={handleImageUpload}
@@ -997,95 +1048,144 @@ export default function App() {
               )}
             </PanelSection>
 
-            <PanelSection
-              title="Categories"
-              icon={<Tags className="w-3.5 h-3.5" />}
-              badge={selectedTags.length > 0 ? (
-                <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full leading-none">{selectedTags.length}</span>
-              ) : undefined}
-            >
-              <div className="space-y-4">
-                {/* Template type segmented */}
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-2">Template Type</Label>
-                  <div className="flex bg-secondary rounded-md p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsProfileTemplate(true)}
-                      className={`flex-1 text-xs py-1.5 rounded-sm ${
-                        isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >Self</button>
-                    <button
-                      type="button"
-                      onClick={() => setIsProfileTemplate(false)}
-                      className={`flex-1 text-xs py-1.5 rounded-sm ${
-                        !isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >Wishes</button>
-                  </div>
-                </div>
-
-                {categoriesError ? (
-                  <Alert variant="destructive" className="py-2.5 px-3">
-                    <AlertCircle />
-                    <AlertTitle className="text-xs">{isProfileTemplate ? 'Self' : 'Wishes'} Tags</AlertTitle>
-                    <AlertDescription className="flex items-center justify-between gap-2 text-xs">
-                      <span>Couldn't load tags</span>
-                      <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchCategories}>Retry</Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <TagSelector
-                    title={`${isProfileTemplate ? 'Self' : 'Wishes'} Tags`}
-                    availableTags={availableTags}
-                    selectedTags={selectedTags}
-                    onTagsChange={setSelectedTags}
-                    required
-                  />
-                )}
-
-                <Separator />
-
-                {languagesError ? (
-                  <Alert variant="destructive" className="py-2.5 px-3">
-                    <AlertCircle />
-                    <AlertTitle className="text-xs">Language</AlertTitle>
-                    <AlertDescription className="flex items-center justify-between gap-2 text-xs">
-                      <span>Couldn't load languages</span>
-                      <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchLanguages}>Retry</Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <TagSelector
-                    title="Language"
-                    availableTags={languageTags}
-                    selectedTags={selectedLanguages}
-                    onTagsChange={setSelectedLanguages}
-                    required
-                  />
-                )}
+            {/* Locked section stubs — visible but inactive until a background is uploaded */}
+            {!backgroundImage && (
+              <div className="pointer-events-none select-none">
+                <PanelSection title="Categories" icon={<Tags className="w-3.5 h-3.5" />} defaultOpen={false} muted>
+                  <></>
+                </PanelSection>
+                <PanelSection title="Post details" icon={<CalendarClock className="w-3.5 h-3.5" />} defaultOpen={false} muted>
+                  <></>
+                </PanelSection>
+                <PanelSection title="Export" icon={<Download className="w-3.5 h-3.5" />} defaultOpen={false} muted showSeparator={false}>
+                  <></>
+                </PanelSection>
               </div>
-            </PanelSection>
+            )}
 
-            <PanelSection title="Export" icon={<Download className="w-3.5 h-3.5" />}>
-              <ExportPanel
-                backgroundImage={backgroundImage}
-                imageHolder={imageHolder}
-                nameHolder={nameHolder}
-                isProfileTemplate={isProfileTemplate}
-                selectedTags={selectedTags}
-                selectedLanguages={selectedLanguages}
-                canvasWidth={CANVAS_WIDTH}
-                canvasHeight={canvasHeight}
-                onExport={handleExport}
-                onDownloadImage={handleDownloadRenderedImage}
-                dominantColorHex={dominantColorHex}
-                dominantColorCopied={dominantColorCopied}
-                onCopyDominantColor={handleCopyDominantColor}
-                isExporting={isExporting}
-              />
-            </PanelSection>
+            {/* Dependent sections — cascade in once background is set */}
+            {backgroundImage && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.26, ease: [0.2, 0, 0, 1], delay: 0.04 }}
+                >
+                  <PanelSection
+                    title="Categories"
+                    icon={<Tags className="w-3.5 h-3.5" />}
+                    badge={selectedTags.length > 0 ? (
+                      <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full leading-none">{selectedTags.length}</span>
+                    ) : undefined}
+                  >
+                    <div className="space-y-4">
+                      {categoriesError ? (
+                        <Alert variant="destructive" className="py-2.5 px-3">
+                          <AlertCircle />
+                          <AlertTitle className="text-xs">{isProfileTemplate ? 'Self' : 'Wishes'} Tags</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between gap-2 text-xs">
+                            <span>Couldn't load tags</span>
+                            <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchCategories}>Retry</Button>
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-2">Template Type</Label>
+                            <div className="flex bg-secondary rounded-md p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setIsProfileTemplate(true)}
+                                className={`flex-1 text-xs py-1.5 rounded-sm ${
+                                  isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                              >Self</button>
+                              <button
+                                type="button"
+                                onClick={() => setIsProfileTemplate(false)}
+                                className={`flex-1 text-xs py-1.5 rounded-sm ${
+                                  !isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                              >Wishes</button>
+                            </div>
+                          </div>
+                          <TagSelector
+                            title={`${isProfileTemplate ? 'Self' : 'Wishes'} Tags`}
+                            availableTags={availableTags}
+                            selectedTags={selectedTags}
+                            onTagsChange={setSelectedTags}
+                          />
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {languagesError ? (
+                        <Alert variant="destructive" className="py-2.5 px-3">
+                          <AlertCircle />
+                          <AlertTitle className="text-xs">Language</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between gap-2 text-xs">
+                            <span>Couldn't load languages</span>
+                            <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={fetchLanguages}>Retry</Button>
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <TagSelector
+                          title="Language"
+                          availableTags={languageTags}
+                          selectedTags={selectedLanguages}
+                          onTagsChange={setSelectedLanguages}
+                        />
+                      )}
+                    </div>
+                  </PanelSection>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.26, ease: [0.2, 0, 0, 1], delay: 0.10 }}
+                >
+                  <PanelSection title="Post details" icon={<CalendarClock className="w-3.5 h-3.5" />}>
+                    <PostDetailsSection
+                      postName={postName}
+                      onPostNameChange={setPostName}
+                      liveImmediately={postLiveImmediately}
+                      onLiveImmediatelyChange={setPostLiveImmediately}
+                      scheduleDateKey={postScheduleDateKey}
+                      onScheduleDateKeyChange={setPostScheduleDateKey}
+                      scheduleTimeHm={postScheduleTimeHm}
+                      onScheduleTimeHmChange={setPostScheduleTimeHm}
+                    />
+                  </PanelSection>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.26, ease: [0.2, 0, 0, 1], delay: 0.16 }}
+                >
+                  <PanelSection title="Export" icon={<Download className="w-3.5 h-3.5" />} showSeparator={false}>
+                    <ExportPanel
+                      backgroundImage={backgroundImage}
+                      imageHolder={imageHolder}
+                      nameHolder={nameHolder}
+                      isProfileTemplate={isProfileTemplate}
+                      selectedTags={selectedTags}
+                      selectedLanguages={selectedLanguages}
+                      canvasWidth={CANVAS_WIDTH}
+                      canvasHeight={canvasHeight}
+                      onExport={handleExport}
+                      isExporting={isExporting}
+                      postName={postName}
+                      postLiveImmediately={postLiveImmediately}
+                      postScheduleDateKey={postScheduleDateKey}
+                      postScheduleTimeHm={postScheduleTimeHm}
+                    />
+                  </PanelSection>
+                </motion.div>
+              </>
+            )}
           </div>
           <LsdCredit onClick={() => setShowEasterEgg(true)} />
         </aside>
@@ -1204,38 +1304,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Test photo — at the bottom, low prominence */}
-                    <Separator />
-                    <div className="flex items-center gap-2">
-                      <label className="cursor-pointer shrink-0">
-                        <input
-                          type="file" accept="image/*" className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => setUserPhoto(ev.target?.result as string);
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                        {userPhoto ? (
-                          <img src={userPhoto} alt="Test" className="w-8 h-8 rounded-md object-cover border border-border hover:ring-2 hover:ring-ring/30 transition-shadow" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-md border border-dashed border-border flex items-center justify-center hover:border-primary/50 transition-colors">
-                            <User className="w-3.5 h-3.5 text-muted-foreground" />
-                          </div>
-                        )}
-                      </label>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[11px] text-muted-foreground">{userPhoto ? 'Test photo loaded' : 'No test photo'}</span>
-                      </div>
-                      {userPhoto && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => setUserPhoto(null)}>
-                          <X className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
                   </div>
                 </PanelSection>
 

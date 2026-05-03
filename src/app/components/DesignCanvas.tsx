@@ -40,7 +40,7 @@ interface DesignCanvasProps {
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
-  onImageUpload?: (imageUrl: string) => void;
+  onImageUpload?: (imageUrl: string, fileMeta?: { name?: string }) => void;
   allowedCanvasSizes?: { height: number; label: string }[];
 }
 
@@ -267,7 +267,7 @@ export function DesignCanvas({
     const reader = new FileReader();
     reader.onloadend = () => {
       const imageUrl = reader.result as string;
-      onImageUpload?.(imageUrl);
+      onImageUpload?.(imageUrl, { name: file.name });
     };
     reader.readAsDataURL(file);
     event.target.value = '';

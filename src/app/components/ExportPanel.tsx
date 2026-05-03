@@ -1,5 +1,6 @@
-import { AlertCircle, Check, CheckCircle2, Copy, Download, ImageDown, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { isPostScheduleAllowed } from '@/utils/postSchedule';
 
 interface ExportPanelProps {
   backgroundImage: string | null;
@@ -11,11 +12,11 @@ interface ExportPanelProps {
   canvasWidth: number;
   canvasHeight: number;
   onExport: () => void;
-  onDownloadImage?: () => void;
-  dominantColorHex?: string | null;
-  onCopyDominantColor?: () => void;
-  dominantColorCopied?: boolean;
   isExporting?: boolean;
+  postName?: string;
+  postLiveImmediately?: boolean;
+  postScheduleDateKey?: string;
+  postScheduleTimeHm?: string;
 }
 
 export function ExportPanel({
@@ -27,16 +28,21 @@ export function ExportPanel({
   canvasWidth,
   canvasHeight,
   onExport,
-  onDownloadImage,
-  dominantColorHex,
-  onCopyDominantColor,
-  dominantColorCopied = false,
   isExporting = false,
+  postName = '',
+  postLiveImmediately = false,
+  postScheduleDateKey = '',
+  postScheduleTimeHm = '09:00',
 }: ExportPanelProps) {
   const checks = [
     { ok: !!backgroundImage, label: 'Background uploaded' },
     { ok: selectedTags.length > 0, label: 'Primary category selected' },
     { ok: selectedLanguages.length > 0, label: 'Language selected' },
+    { ok: !!(postName ?? '').trim(), label: 'Post name entered' },
+    {
+      ok: isPostScheduleAllowed(postLiveImmediately, postScheduleDateKey, postScheduleTimeHm),
+      label: postLiveImmediately ? 'Publishes when saved (live)' : 'Scheduled publish time',
+    },
     {
       ok: imageHolder.x >= 0 && imageHolder.y >= 0 &&
         imageHolder.x + imageHolder.diameter <= canvasWidth &&
@@ -75,53 +81,9 @@ export function ExportPanel({
         ) : (
           <Download className="w-3.5 h-3.5" />
         )}
-        {isExporting ? 'Exporting…' : allValid ? 'Export Template' : 'Complete all checks'}
+        {isExporting ? 'Exporting…' : allValid ? 'Export' : 'Complete all checks'}
       </Button>
 
-      {dominantColorHex && onCopyDominantColor && (
-        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className="h-4 w-4 rounded-sm border border-border/80 shrink-0"
-              style={{ backgroundColor: dominantColorHex }}
-              aria-label={`Dominant color ${dominantColorHex}`}
-            />
-            <span className="text-xs font-mono text-foreground/80 truncate">{dominantColorHex}</span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 text-[11px] gap-1.5"
-            onClick={onCopyDominantColor}
-          >
-            {dominantColorCopied ? (
-              <>
-                <Check className="w-3 h-3" />
-                Copied
-              </>
-            ) : (
-              <>
-                <Copy className="w-3 h-3" />
-                Copy
-              </>
-            )}
-          </Button>
-        </div>
-      )}
-
-      {backgroundImage && onDownloadImage && (
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-          onClick={onDownloadImage}
-        >
-          <ImageDown className="w-3.5 h-3.5" />
-          Download rendered image
-        </Button>
-      )}
     </div>
   );
 }

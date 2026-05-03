@@ -81,9 +81,12 @@ Your app chooses the font. Sizes and weights are font-agnostic.
   "t": true,
   "pc": ["Self"],
   "lg": ["English", "Hindi"],
+  "pn": "Festival-banner",
   "bg": "uploads/background-2026-04-19T10-20-30.jpg",
   "dc": "#E84393",
   "mt": "image",
+  "li": false,
+  "sa": "2026-05-03T06:30:00.000Z",
   "ip": { ... },
   "np": { ... }
 }
@@ -95,11 +98,16 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 | `t`  | boolean                | `true` = Self/Profile, `false` = Wishes/Upload |
 | `pc` | string[]               | Primary category tags |
 | `lg` | string[]               | Language tags |
+| `pn` | string                 | **Post name** — required non-empty trimmed string; same text as **`title`** on template create API. |
 | `bg` | string \| `null`       | **Object storage key** for the background image (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. |
 | `dc` | string \| `null`       | **Dominant colour** of the background (`#RRGGBB`), from the image in the editor. Use for UI chrome, placeholders, or gradients when the bitmap is not loaded. |
 | `mt` | `"image"` \| `"video"` | Current studio export uses raster backgrounds → **`image`**. |
+| `li` | boolean                | Default **`false`**: **`sa`** selects go-live (**scheduled**). Set **`true`** for immediate publish once saved/processed (**`sa`** → **`null`**). |
+| `sa` | string \| **`null`**   | ISO 8601 UTC when **`li`** is **`false`** (typically in the future at export time). **`null`** when **`li`** is **`true`**. |
 | `ip` | object                 | Photo placeholder |
 | `np` | object                 | Name placeholder (includes **x, y, width, height** as %) |
+
+**How `sa` is produced in the studio:** the editor collects a **local** calendar date and **local** time-of-day on the creator’s machine, then emits a **single UTC** instant in **`sa`** (no separate compressed keys for date vs time in `raw_config`).
 
 ---
 
@@ -355,6 +363,8 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 
 ## Changelog (designer exploration / April 2026 vs March 2026)
 
+- **`pn`:** mandatory **`postName`** (defaults from uploaded background filename in the studio).
+- **`li` / `sa`:** publish scheduling — default is **scheduled**; immediate only when **`li`** is **`true`** (ISO 8601 UTC `scheduledAt` when dated).
 - **`dc` (dominant color):** added for theming; may be `null` if not computed.  
 - **`bg`:** production export is the **storage key** after upload, not an inline data URL.  
 - **`np`:** **x, w, h** are always serialized; name band is no longer “fixed width / centered only” in data — layout matches the editor.

@@ -22,6 +22,15 @@ interface TemplateJSONFull {
   isProfileTemplate: boolean;
   primaryCategories: string[];
   languageTags: string[];
+  /** Creator-visible title / list name — required, trimmed non-empty string from Poster Studio */
+  postName: string;
+  /** When true, the post becomes visible once the backend completes processing/saving. */
+  publishLiveImmediately: boolean;
+  /**
+   * When `publishLiveImmediately` is false, ISO 8601 UTC instant when the post should go live (must be in the future at export).
+   * When `publishLiveImmediately` is true, this should be **`null`**.
+   */
+  scheduledAt: string | null;
   backgroundImage: string | null;
   /** Dominant colour sampled from the background in the editor (e.g. "#E84393"). */
   dominantColorHex: string | null;
@@ -37,6 +46,9 @@ interface TemplateJSONFull {
 | `isProfileTemplate` | boolean                     | `true` = Self/Profile, `false` = Wishes/Upload                    |
 | `primaryCategories` | string[]                    | Tags chosen in the editor (Self/Wishes categories)                |
 | `languageTags`      | string[]                    | Language labels (e.g. `["English","Hindi"]`)                      |
+| `postName`          | string                      | Required display title; matches **`title`** on template create.   |
+| `publishLiveImmediately` | boolean               | **`true`** = visible as soon as the template/post is activated on the backend; **`false`** = use `scheduledAt`. |
+| `scheduledAt`       | string \| **`null`**        | ISO 8601 **UTC** for go-live time when not immediate (e.g. `"2026-05-03T06:30:00.000Z"`). **`null`** when immediate. |
 | `backgroundImage`   | string \| null              | **Object storage key** (e.g. `uploads/background-....jpg`) after presigned upload, or legacy `data:` / `https:` for tests. `null` = no background. |
 | `dominantColorHex`  | string \| null              | Hex `#RRGGBB` from the background image in the studio, or `null` if unknown. |
 | `mediaType`         | `'image'` \| `'video'`      | How to interpret `backgroundImage`. Current export path uses raster → `image`. |
@@ -180,11 +192,16 @@ field path they map to in the logical model above.
 | `t`         | `isProfileTemplate`  | Template type — `true` = Self/Profile, `false` = Wishes/Upload   |
 | `pc`        | `primaryCategories`  | Primary categories (tags) selected in the editor                 |
 | `lg`        | `languageTags`       | Language tags (e.g. `["English","Hindi"]`)                       |
+| `pn`        | `postName`           | Post / template display name (trimmed non-empty string)           |
+| `li`        | `publishLiveImmediately` | Immediate vs scheduled publishing                                |
+| `sa`        | `scheduledAt`        | ISO 8601 UTC go-live instant, or **`null`** when `li === true`  |
 | `bg`        | `backgroundImage`    | **Storage key** for the uploaded background (or `data:` / full URL in legacy flows), or `null` |
 | `dc`        | `dominantColorHex`   | Dominant background colour `#RRGGBB`, or `null`                  |
 | `mt`        | `mediaType`          | Media type for `backgroundImage`: `"image"` or `"video"`         |
 | `ip`        | `imagePlaceholder`   | Image (photo) placeholder object                                 |
 | `np`        | `namePlaceholder`    | Name text placeholder object                                     |
+
+Poster Studio derives **`sa`** from the creator’s **local** calendar date (`YYYY-MM-DD`) and **local** time (`HH:mm`) at export into one **UTC ISO 8601** string; payloads do **not** include separate compressed fields for raw date/time.
 
 #### 7.2 `ip` — Image placeholder
 
@@ -260,6 +277,8 @@ When `w === 0`, there is effectively **no stroke**.
   as your internal backend model.
 - Use the **compact → full map** above to decode the compact payload you receive
   from the Poster Studio web tool into that internal model.
+- **`pn` (`postName`):** required human-facing name; persist with **`raw_config`** and align with **`title`** on poster-template create calls.
+- **`li` / `sa` (`publishLiveImmediately` / `scheduledAt`):** when `li` is `true`, expose the template/post as soon as it is persisted; when `false`, hold visibility until **`sa`** (parse as UTC ISO instant). Prefer **`sa === null`** when `li === true`.
 - **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production.
 - **`dc` / `dominantColorHex`:** optional metadata for search, theming, or client-side UI; safe to index as a string or `null`.
 - All rendering-specific React Native details live in  
@@ -270,6 +289,8 @@ When `w === 0`, there is effectively **no stroke**.
 
 ### 9. Changelog (April 2026 vs March 2026 baseline)
 
+- **`pn` → `postName`:** mandatory post title — mirrors **`title`** on template create requests.
+- **`li` / `sa` → `publishLiveImmediately` / `scheduledAt`:** post visibility — immediate (`sa: null`) vs scheduled UTC instant.
 - **`dc` → `dominantColorHex`:** new optional field.
 - **`bg`:** production payloads use **object storage keys** after presigned upload; older docs assumed inline data URLs.
 - **`np`:** `x`, `w`, and `h` are always present in compact JSON (name band is fully specified).

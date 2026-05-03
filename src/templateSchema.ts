@@ -11,12 +11,21 @@ export type CompactTemplateJSON = {
   pc: string[];
   /** languageTags */
   lg: string[];
+  /** postName — visible title / display name (required, non-empty) */
+  pn: string;
   /** backgroundImage (data URL) or null */
   bg: string | null;
   /** dominantColorHex from background image (e.g. "#E84393") */
   dc: string | null;
   /** mediaType: "image" | "video" */
   mt: 'image' | 'video';
+  /** publishLiveImmediately — when true the post becomes visible once saved/processed */
+  li: boolean;
+  /**
+   * scheduledAt ISO 8601 UTC when visibility should begin.
+   * Must be non-null strictly in the future when `li === false`; use `null` when `li === true`.
+   */
+  sa: string | null;
   /** Image (photo) placeholder */
   ip: {
     /** x position (% of canvas width, 0–100) */
@@ -95,9 +104,12 @@ export const TEMPLATE_KEY_MAP = {
   t: 'isProfileTemplate',
   pc: 'primaryCategories',
   lg: 'languageTags',
+  pn: 'postName',
   bg: 'backgroundImage',
   dc: 'dominantColorHex',
   mt: 'mediaType',
+  li: 'publishLiveImmediately',
+  sa: 'scheduledAt',
   ip: 'imagePlaceholder',
   np: 'namePlaceholder',
   ip_x: 'imagePlaceholder.x',

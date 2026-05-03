@@ -8,6 +8,7 @@ Product, feature, and technical notes for Poster Studio (internal design tool). 
 
 _(Add items here before cutting a release or milestone.)_
 
+- **Post details:** Mandatory **Post name** (defaults from uploaded image filename); **scheduled publishing** by default with **Publish live immediately** opt-in; **`raw_config`** adds **`pn`**, **`li`**, **`sa`** (`postName`, `publishLiveImmediately`, `scheduledAt`).
 - **Docs:** **`guidelines/DESIGN-SYSTEM.md`** describes tokens, dark mode wiring, and shadcn-aligned accent hovers (`Button`, `select`, etc.); linked from **`README.md`** and **`guidelines/Guidelines.md`**.
 
 ---
