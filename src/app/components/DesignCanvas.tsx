@@ -6,9 +6,9 @@ import { circleToRect, nameToRect, computeDistances, KEYBOARD_STEP, KEYBOARD_SHI
 import type { Rect, SnapGuide, DistanceIndicator } from './snap-engine';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { isRasterBackgroundFile } from '@/utils/isRasterBackgroundFile';
+import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
 
-const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
 interface ImagePlaceholder { x: number; y: number; diameter: number; }
@@ -40,7 +40,7 @@ interface DesignCanvasProps {
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
-  onImageUpload?: (imageUrl: string, fileMeta?: { name?: string }) => void;
+  onImageUpload?: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   allowedCanvasSizes?: { height: number; label: string }[];
 }
 
@@ -252,22 +252,26 @@ export function DesignCanvas({
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!isRasterBackgroundFile(file)) {
+    const isImage = isRasterBackgroundFile(file);
+    const isVideo = isVideoBackgroundFile(file);
+    if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Only JPEG, PNG, or WebP images are allowed.',
+        description: 'Only JPEG, PNG, WebP images or MP4 videos are allowed.',
       });
       event.target.value = '';
       return;
     }
-    if (file.size > MAX_IMAGE_SIZE) {
-      toast.error('Image size exceeds the maximum limit of 15MB.');
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(`File too large`, { description: 'Files must be under 15 MB.' });
       event.target.value = '';
       return;
     }
     const reader = new FileReader();
     reader.onloadend = () => {
-      const imageUrl = reader.result as string;
-      onImageUpload?.(imageUrl, { name: file.name });
+      onImageUpload?.(reader.result as string, {
+        name: file.name,
+        mediaType: isVideo ? 'video' : 'image',
+      });
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -408,7 +412,7 @@ export function DesignCanvas({
           <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group">
             <input
               type="file"
-              accept=".jpg,.jpeg,.jfif,.png,.webp,image/jpeg,image/png,image/webp"
+              accept=".jpg,.jpeg,.jfif,.png,.webp,.mp4,image/jpeg,image/png,image/webp,video/mp4"
               className="hidden"
               onChange={handleImageUpload}
             />
@@ -416,7 +420,7 @@ export function DesignCanvas({
               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                 <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
-              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload a Background to start</p>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload an Image or MP4 to start</p>
             </div>
           </label>
         )}

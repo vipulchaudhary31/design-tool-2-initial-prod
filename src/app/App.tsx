@@ -49,7 +49,7 @@ import { getCategories } from '@/api/categories/categories';
 import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
-import { extensionForRasterContentType, normalizeRasterUploadContentType } from '@/utils/isRasterBackgroundFile';
+import { extensionForBackgroundContentType, normalizeBackgroundUploadContentType } from '@/utils/isRasterBackgroundFile';
 import {
   loadPosterStudioSession,
   savePosterStudioSession,
@@ -302,6 +302,7 @@ export default function App() {
 
   /* ================= DESIGN STATE ================= */
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [backgroundMediaType, setBackgroundMediaType] = useState<'image' | 'video'>('image');
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isProfileTemplate, setIsProfileTemplate] = useState<boolean>(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -378,27 +379,50 @@ export default function App() {
     ? computeAspectRatioString(imageDimensions.width, imageDimensions.height)
     : '';
 
-  const handleImageUpload = (imageUrl: string, fileMeta?: { name?: string }) => {
-    const validateAndSet = (srcWidth: number, srcHeight: number) => {
-      const normalizedHeight = Math.round((CANVAS_WIDTH / srcWidth) * srcHeight);
-      const matched = ALLOWED_CANVAS_SIZES.find(
-        size => Math.abs(normalizedHeight - size.height) <= 5
-      );
-      if (!matched) {
-        toast.error('Unsupported aspect ratio', {
-          description: `Accepted: ${ALLOWED_CANVAS_SIZES.map(s => s.label).join(', ')}`,
-        });
-        return;
+  const handleImageUpload = (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => {
+    const isVideo = fileMeta?.mediaType === 'video';
+
+    const applyBackground = (srcWidth: number, srcHeight: number) => {
+      if (!isVideo) {
+        const normalizedHeight = Math.round((CANVAS_WIDTH / srcWidth) * srcHeight);
+        const matched = ALLOWED_CANVAS_SIZES.find(
+          size => Math.abs(normalizedHeight - size.height) <= 5
+        );
+        if (!matched) {
+          toast.error('Unsupported aspect ratio', {
+            description: `Accepted: ${ALLOWED_CANVAS_SIZES.map(s => s.label).join(', ')}`,
+          });
+          return;
+        }
+        setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
+      } else {
+        // For video, pick the nearest allowed canvas size by aspect ratio
+        const normalizedHeight = srcWidth > 0 && srcHeight > 0
+          ? Math.round((CANVAS_WIDTH / srcWidth) * srcHeight)
+          : ALLOWED_CANVAS_SIZES[1].height;
+        const matched = ALLOWED_CANVAS_SIZES.reduce((best, size) =>
+          Math.abs(size.height - normalizedHeight) < Math.abs(best.height - normalizedHeight) ? size : best
+        );
+        setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
       }
-      setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
       setBackgroundImage(imageUrl);
+      setBackgroundMediaType(isVideo ? 'video' : 'image');
       if (fileMeta?.name?.trim()) {
         setPostName(defaultPostNameFromImageFilename(fileMeta.name));
       }
     };
-    const img = new window.Image();
-    img.onload = () => validateAndSet(img.naturalWidth, img.naturalHeight);
-    img.src = imageUrl;
+
+    if (isVideo) {
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => applyBackground(v.videoWidth, v.videoHeight);
+      v.onerror = () => applyBackground(0, 0);
+      v.src = imageUrl;
+    } else {
+      const img = new window.Image();
+      img.onload = () => applyBackground(img.naturalWidth, img.naturalHeight);
+      img.src = imageUrl;
+    }
   };
 
   const availableTags = isProfileTemplate ? profileTags : uploadTags;
@@ -418,7 +442,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const extractDominant = async () => {
-      if (!backgroundImage) {
+      if (!backgroundImage || backgroundMediaType === 'video') {
         setDominantColorHex(null);
         return;
       }
@@ -439,7 +463,7 @@ export default function App() {
     };
     extractDominant();
     return () => { cancelled = true; };
-  }, [backgroundImage]);
+  }, [backgroundImage, backgroundMediaType]);
 
   const [imageHolder, setImageHolder] = useState<ImagePlaceholder>(() => defaultImageHolder());
 
@@ -462,6 +486,7 @@ export default function App() {
   /** Clear in-memory workspace so logout → login starts fresh (localStorage alone is insufficient while the app stays mounted). */
   const resetStudioWorkspaceToBlank = useCallback(() => {
     setBackgroundImage(null);
+    setBackgroundMediaType('image');
     setImageDimensions(null);
     setIsProfileTemplate(true);
     setSelectedTags([]);
@@ -715,9 +740,9 @@ export default function App() {
 
     setIsExporting(true);
     try {
-      // 1. Convert background image to blob
+      // 1. Convert background to blob
       const bgBlob = await fetch(backgroundImage!).then(r => r.blob());
-      const uploadContentType = normalizeRasterUploadContentType(bgBlob, backgroundImage);
+      const uploadContentType = normalizeBackgroundUploadContentType(bgBlob, backgroundImage);
       const uploadBlob =
         bgBlob.type === uploadContentType
           ? bgBlob
@@ -725,7 +750,7 @@ export default function App() {
 
       // 2. Get presigned URL
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const ext = extensionForRasterContentType(uploadContentType);
+      const ext = extensionForBackgroundContentType(uploadContentType);
       const { url: presignedUrl, fields } = await getPresignedUrl({
         file_name: `background-${ts}.${ext}`,
         content_type: uploadContentType,
@@ -751,7 +776,7 @@ export default function App() {
         pn: postTitle,
         bg: file_url,
         dc: dominantColorHex,
-        mt: 'image',
+        mt: backgroundMediaType,
         li: postLiveImmediately,
         sa: scheduledAtIso,
         ip: {
@@ -1036,6 +1061,7 @@ export default function App() {
               <ImageUploader
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
+                mediaType={backgroundMediaType}
               />
               {!backgroundImage && (
                 <div className="mt-3 flex flex-wrap gap-1">
@@ -1210,7 +1236,7 @@ export default function App() {
             userPhoto={userPhoto}
             samplePhoto={photoHasBackground ? samplePhotoBg : samplePhotoNoBg}
             photoHasBackground={photoHasBackground}
-            mediaType="image"
+            mediaType={backgroundMediaType}
             textAlignment={textStyle.textAlignment}
             letterSpacing={textStyle.letterSpacing}
             textFontFamily={nameFontFamily}

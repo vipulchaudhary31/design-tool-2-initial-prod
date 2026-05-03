@@ -1,10 +1,10 @@
 import { useRef } from 'react';
-import { Upload, ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, ImageIcon, Film, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
-import { isRasterBackgroundFile } from '@/utils/isRasterBackgroundFile';
+import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
 
-const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -12,31 +12,39 @@ function formatFileSize(bytes: number): string {
 }
 
 interface ImageUploaderProps {
-  onImageUpload: (imageUrl: string, fileMeta?: { name?: string }) => void;
+  onImageUpload: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   hasImage: boolean;
+  mediaType?: 'image' | 'video';
 }
 
-export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
+export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processChosenFile = (file: File, inputEl: HTMLInputElement) => {
-    if (!isRasterBackgroundFile(file)) {
+    const isImage = isRasterBackgroundFile(file);
+    const isVideo = isVideoBackgroundFile(file);
+
+    if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Only JPEG, PNG, or WebP images are allowed.',
+        description: 'Only JPEG, PNG, WebP images or MP4 videos are allowed.',
       });
       inputEl.value = '';
       return;
     }
-    if (file.size > MAX_IMAGE_SIZE) {
+    if (file.size > MAX_FILE_SIZE) {
       toast.error(`File too large (${formatFileSize(file.size)})`, {
-        description: 'Image files must be under 15 MB.',
+        description: 'Files must be under 15 MB.',
       });
       inputEl.value = '';
       return;
     }
+
     const reader = new FileReader();
     reader.onloadend = () => {
-      onImageUpload(reader.result as string, { name: file.name });
+      onImageUpload(reader.result as string, {
+        name: file.name,
+        mediaType: isVideo ? 'video' : 'image',
+      });
     };
     reader.readAsDataURL(file);
     inputEl.value = '';
@@ -55,7 +63,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".jpg,.jpeg,.jfif,.png,.webp,image/jpeg,image/png,image/webp"
+        accept=".jpg,.jpeg,.jfif,.png,.webp,.mp4,image/jpeg,image/png,image/webp,video/mp4"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -71,16 +79,16 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
           </div>
           <div className="text-center">
             <p className="text-sm text-foreground/80">Upload Background</p>
-            <p className="text-xs text-muted-foreground mt-0.5">JPEG, PNG, or WebP</p>
+            <p className="text-xs text-muted-foreground mt-0.5">JPEG, PNG, WebP or MP4 · max 15 MB</p>
           </div>
         </button>
       ) : (
         <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/45">
           <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-primary/[0.055] text-primary/75">
-            <ImageIcon className="h-4 w-4" />
+            {mediaType === 'video' ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-foreground/80">Image loaded</p>
+            <p className="text-xs text-foreground/80">{mediaType === 'video' ? 'Video loaded' : 'Image loaded'}</p>
             <p className="text-[11px] text-muted-foreground">Ready to design</p>
           </div>
           <Button

@@ -1,8 +1,10 @@
 export type ImageContentType = 'image/jpeg' | 'image/webp' | 'image/png';
+export type VideoContentType = 'video/mp4';
+export type BackgroundContentType = ImageContentType | VideoContentType;
 
 export interface GetPresignedUrlRequest {
   file_name: string;
-  content_type: ImageContentType;
+  content_type: BackgroundContentType;
 }
 
 export interface PresignedUrlFields {
