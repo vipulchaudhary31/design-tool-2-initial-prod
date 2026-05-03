@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { DraggablePlaceholder } from './DraggablePlaceholder';
 import type { PhotoAnimationPreset } from './DraggablePlaceholder';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
@@ -48,6 +48,7 @@ interface DesignCanvasProps {
   photoAnimationPreset?: PhotoAnimationPreset;
   photoAnimationDuration?: number;
   photoAnimationReplayTick?: number;
+  onReplayMediaFromStart?: () => void;
   nameLayout?: 'strip' | 'overlay';
   dominantColorHex?: string | null;
   /** Full poster height incl. strip (design px); defaults to `canvasHeight`. */
@@ -96,6 +97,7 @@ export function DesignCanvas({
   photoAnimationPreset = 'none',
   photoAnimationDuration = 2.0,
   photoAnimationReplayTick = 0,
+  onReplayMediaFromStart,
   nameLayout = 'strip',
   dominantColorHex = null,
   posterCanvasHeight,
@@ -303,6 +305,18 @@ export function DesignCanvas({
     event.target.value = '';
   };
 
+  const replayMediaFromStart = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      video.currentTime = 0;
+      void video.play();
+    } catch {
+      // Ignore play interruptions in preview controls.
+    }
+    onReplayMediaFromStart?.();
+  }, [onReplayMediaFromStart]);
+
   // ── Render snap guide lines + distance indicators as SVG overlay ──
   const renderOverlay = () => {
     const hasGuides = activeGuides.length > 0;
@@ -451,21 +465,34 @@ export function DesignCanvas({
 
         {/* Mute/unmute button for video backgrounds */}
         {backgroundImage && mediaType === 'video' && (
-          <button
-            type="button"
-            aria-label={videoMuted ? 'Unmute video' : 'Mute video'}
-            onClick={() => setVideoMuted(m => !m)}
-            className="absolute right-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors pointer-events-auto"
+          <div
+            className="absolute right-2 z-40 flex items-center gap-1.5 pointer-events-auto"
             style={{
               bottom: nameLayout === 'strip'
                 ? stripDesignHeightPx(canvasHeight) * scale + 8
                 : 8,
             }}
           >
-            {videoMuted
-              ? <VolumeX className="w-3.5 h-3.5" />
-              : <Volume2 className="w-3.5 h-3.5" />}
-          </button>
+            <button
+              type="button"
+              aria-label="Restart video from beginning"
+              onClick={replayMediaFromStart}
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+              title="Restart from start"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={videoMuted ? 'Unmute video' : 'Mute video'}
+              onClick={() => setVideoMuted(m => !m)}
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+            >
+              {videoMuted
+                ? <VolumeX className="w-3.5 h-3.5" />
+                : <Volume2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
         )}
         {!backgroundImage && (
           <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group">
@@ -506,7 +533,7 @@ export function DesignCanvas({
               onDragRect={handleImageDragRect}
               photoAnimation={
                 mediaType === 'video' && photoAnimationPreset !== 'none'
-                  ? { preset: photoAnimationPreset, duration: photoAnimationDuration, delay: 0, playKey: (videoPlayCount * 10000) + photoAnimationReplayTick }
+                  ? { preset: photoAnimationPreset, duration: photoAnimationDuration, playKey: (videoPlayCount * 10000) + photoAnimationReplayTick }
                   : undefined
               }
             />

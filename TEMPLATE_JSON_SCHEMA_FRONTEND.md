@@ -177,8 +177,7 @@ const borderWidth  = ip.sw * scale;
 ```json
 "ia": {
   "p": "bottom-to-top",
-  "d": 2.0,
-  "dl": 0
+  "d": 2.4
 }
 ```
 
@@ -186,11 +185,11 @@ const borderWidth  = ip.sw * scale;
 |-----|------|-------------|
 | `p` | `"bottom-to-top"` \| `"top-to-bottom"` \| `"left-to-right"` \| `"right-to-left"` | Direction the photo enters **from** before settling at its `ip.x/ip.y` final position. |
 | `d` | number | Duration in seconds. |
-| `dl` | number | Delay in seconds. Current studio UI always exports `0`, but field remains for compatibility. |
 
 Runtime expectation on RN/export renderers:
 - Start the animation at **video time `0`**.
 - Run for **`d` seconds**.
+- Studio preview/export currently use a fixed **600px entry offset** in the selected direction before easing into the final `ip` position.
 - End at the exact `ip` final coordinates and keep it there for the rest of the video.
 - Do not retrigger unless playback restarts from `0`.
 
@@ -485,6 +484,6 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 
 ### May 2026
 - **Video backgrounds (`mt: "video"`):** studio accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. **`dc`** is sampled for **videos** as well as images (see strip section). `ar` may be any GCD-reduced ratio (not limited to the 4 image presets). Render with `<Video>` when `mt === "video"`.
-- **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`) and delay (`dl`, currently `0` in studio UI). Applies to the **photo layer** (`ip`), not the name text layer.
+- **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`). Applies to the **photo layer** (`ip`), not the name text layer.
 - **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height **6.5%** of background band; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** `dc` is extracted for **video** backgrounds (one or two frame samples; brighter result preferred) as well as images. Studio normalizes to **`#000000`** when sampling fails. Strip mode mixes black at 50% with `dc`; fallback dominant = **`#000000`**. Older docs incorrectly stated `dc` was always `null` for video.

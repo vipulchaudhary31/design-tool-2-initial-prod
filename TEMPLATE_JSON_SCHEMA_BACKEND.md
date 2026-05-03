@@ -103,7 +103,6 @@ interface ImagePlaceholder {
 interface ImageAnimation {
   preset: 'bottom-to-top' | 'top-to-bottom' | 'left-to-right' | 'right-to-left';
   durationSeconds: number;
-  delaySeconds: number;
 }
 ```
 
@@ -111,7 +110,6 @@ interface ImageAnimation {
 |--------------------|------------------------------------------------------------------|-------------|
 | `preset`           | `'bottom-to-top' \| 'top-to-bottom' \| 'left-to-right' \| 'right-to-left'` | Entry direction for the photo layer before settling at final `imagePlaceholder` coordinates. |
 | `durationSeconds`  | number                                                           | Animation duration in seconds. |
-| `delaySeconds`     | number                                                           | Delay before animation starts. Current studio exports `0` from UI. |
 
 Semantics:
 - Runs once from video start (`t=0`) and finishes by `durationSeconds`.
@@ -261,7 +259,6 @@ All under `ip`:
 |-------------|-----------------------------------|---------|
 | `ia.p`      | `imageAnimation.preset`           | Direction preset (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) |
 | `ia.d`      | `imageAnimation.durationSeconds`  | Duration in seconds |
-| `ia.dl`     | `imageAnimation.delaySeconds`     | Delay in seconds (currently `0` from studio UI) |
 
 #### 7.3 `np` — Name placeholder
 

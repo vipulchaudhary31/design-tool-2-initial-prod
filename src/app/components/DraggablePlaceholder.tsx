@@ -15,10 +15,10 @@ export type PhotoAnimationPreset = 'none' | 'bottom-to-top' | 'top-to-bottom' | 
  */
 const PHOTO_ANIM_INITIAL: Record<PhotoAnimationPreset, object> = {
   none:            {},
-  'bottom-to-top': { y: 900 },
-  'top-to-bottom': { y: -900 },
-  'left-to-right': { x: -900 },
-  'right-to-left': { x: 900 },
+  'bottom-to-top': { y: 600 },
+  'top-to-bottom': { y: -600 },
+  'left-to-right': { x: -600 },
+  'right-to-left': { x: 600 },
 };
 const PHOTO_ANIM_FINAL: Record<PhotoAnimationPreset, object> = {
   none:            {},
@@ -73,7 +73,7 @@ interface DraggablePlaceholderProps {
   /** Reports the live moving rect during drag (for distance indicators) */
   onDragRect?: (rect: Rect | null) => void;
   /** Photo layer animation — only used for circle type when background is video */
-  photoAnimation?: { preset: PhotoAnimationPreset; duration: number; delay: number; playKey: number };
+  photoAnimation?: { preset: PhotoAnimationPreset; duration: number; playKey: number };
 }
 
 const CORNER_HIT_SIZE = 18;

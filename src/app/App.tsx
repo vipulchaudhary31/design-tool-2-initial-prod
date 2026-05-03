@@ -332,7 +332,7 @@ export default function App() {
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [backgroundMediaType, setBackgroundMediaType] = useState<'image' | 'video'>('image');
   const [photoAnimationPreset, setPhotoAnimationPreset] = useState<PhotoAnimationPreset>('none');
-  const [photoAnimationDuration, setPhotoAnimationDuration] = useState<number>(2.0);
+  const [photoAnimationDuration, setPhotoAnimationDuration] = useState<number>(2.4);
   const [photoAnimationReplayTick, setPhotoAnimationReplayTick] = useState<number>(0);
   const [nameLayout, setNameLayout] = useState<'strip' | 'overlay'>('strip');
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -634,7 +634,7 @@ export default function App() {
     setBackgroundImage(null);
     setBackgroundMediaType('image');
     setPhotoAnimationPreset('none');
-    setPhotoAnimationDuration(2.0);
+    setPhotoAnimationDuration(2.4);
     setPhotoAnimationReplayTick(0);
     setNameLayout('strip');
     setImageDimensions(null);
@@ -949,7 +949,7 @@ export default function App() {
         mt: backgroundMediaType,
         nl: nameLayout,
         ia: (backgroundMediaType === 'video' && photoAnimationPreset !== 'none')
-          ? { p: photoAnimationPreset, d: photoAnimationDuration, dl: 0 }
+          ? { p: photoAnimationPreset, d: photoAnimationDuration }
           : null,
         li: postLiveImmediately,
         sa: scheduledAtIso,
@@ -1070,12 +1070,12 @@ export default function App() {
         const remain = 1 - eased;
 
         const startOffsetX =
-          photoAnimationPreset === 'left-to-right' ? -900
-            : photoAnimationPreset === 'right-to-left' ? 900
+          photoAnimationPreset === 'left-to-right' ? -600
+            : photoAnimationPreset === 'right-to-left' ? 600
               : 0;
         const startOffsetY =
-          photoAnimationPreset === 'bottom-to-top' ? 900
-            : photoAnimationPreset === 'top-to-bottom' ? -900
+          photoAnimationPreset === 'bottom-to-top' ? 600
+            : photoAnimationPreset === 'top-to-bottom' ? -600
               : 0;
 
         return {
@@ -1613,6 +1613,7 @@ export default function App() {
             photoAnimationPreset={photoAnimationPreset}
             photoAnimationDuration={photoAnimationDuration}
             photoAnimationReplayTick={photoAnimationReplayTick}
+            onReplayMediaFromStart={() => setPhotoAnimationReplayTick((n) => n + 1)}
             nameLayout={nameLayout}
             dominantColorHex={dominantColorHex}
             textMaxWidthPercent={textStyle.maxWidthPercent}

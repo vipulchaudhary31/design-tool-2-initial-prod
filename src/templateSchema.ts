@@ -74,12 +74,10 @@ export type CompactTemplateJSON = {
    *
    * p  = preset key  (direction the photo enters FROM)
    * d  = duration in seconds
-   * dl = delay in seconds (before animation starts after video begins playing)
    */
   ia: {
     p: 'bottom-to-top' | 'top-to-bottom' | 'left-to-right' | 'right-to-left';
     d: number;
-    dl: number;
   } | null;
   /** Name/text placeholder */
   np: {
@@ -170,6 +168,5 @@ export const TEMPLATE_KEY_MAP = {
   ia: 'imageAnimation',
   ia_p: 'imageAnimation.preset',
   ia_d: 'imageAnimation.durationSeconds',
-  ia_dl: 'imageAnimation.delaySeconds',
   nl: 'nameLayout',
 } as const;
