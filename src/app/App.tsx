@@ -136,15 +136,15 @@ const DEFAULT_TEXT_STYLE: TextStyle = {
 };
 
 const segmentedToggleGroupClass =
-  'inline-flex items-center rounded-lg border border-border/80 bg-muted/20 p-1 shadow-none';
+  'flex items-center rounded-md bg-secondary p-[3px] gap-[3px]';
 
 function segmentedToggleButtonClass(isActive: boolean) {
   return [
-    'inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-0',
+    'flex min-h-6 items-center gap-1.5 px-2.5 py-0 rounded-sm text-xs font-medium leading-none transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-0',
     isActive
       ? 'bg-primary text-primary-foreground shadow-none'
-      : 'text-muted-foreground hover:bg-transparent hover:text-foreground',
+      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
   ].join(' ');
 }
 
@@ -1444,14 +1444,14 @@ export default function App() {
                                 type="button"
                                 onClick={() => setIsProfileTemplate(true)}
                                 className={`flex-1 text-xs py-1.5 rounded-sm ${
-                                  isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                  isProfileTemplate ? 'bg-primary text-primary-foreground shadow-none' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                               >Self</button>
                               <button
                                 type="button"
                                 onClick={() => setIsProfileTemplate(false)}
                                 className={`flex-1 text-xs py-1.5 rounded-sm ${
-                                  !isProfileTemplate ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                  !isProfileTemplate ? 'bg-primary text-primary-foreground shadow-none' : 'text-muted-foreground hover:text-foreground'
                                 }`}
                               >Wishes</button>
                             </div>
@@ -1688,10 +1688,10 @@ export default function App() {
                                 key={key}
                                 type="button"
                                 onClick={() => setPhotoAnimationPreset(key)}
-                                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                className={`px-2.5 py-1 rounded-md text-[11px] transition-colors border ${
                                   photoAnimationPreset === key
-                                    ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-transparent text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
+                                    ? 'bg-primary/15 text-primary border-primary/30 hover:bg-primary/20'
+                                    : 'bg-transparent text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
                                 }`}
                               >
                                 {label}
