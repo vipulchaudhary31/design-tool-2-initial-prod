@@ -57,6 +57,7 @@ import {
   type PosterStudioSessionPayload,
 } from '@/utils/posterStudioSession';
 import { defaultScheduleDateKey, localYmdHmToISO } from '@/utils/postSchedule';
+import { saveBackgroundMedia, loadBackgroundMedia, clearBackgroundMedia } from '@/utils/backgroundMediaStore';
 import { defaultPostNameFromImageFilename } from '@/utils/postNameFromFile';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
@@ -398,14 +399,10 @@ export default function App() {
         }
         setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
       } else {
-        // For video, pick the nearest allowed canvas size by aspect ratio
         const normalizedHeight = srcWidth > 0 && srcHeight > 0
           ? Math.round((CANVAS_WIDTH / srcWidth) * srcHeight)
           : ALLOWED_CANVAS_SIZES[1].height;
-        const matched = ALLOWED_CANVAS_SIZES.reduce((best, size) =>
-          Math.abs(size.height - normalizedHeight) < Math.abs(best.height - normalizedHeight) ? size : best
-        );
-        setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
+        setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
       }
       setBackgroundImage(imageUrl);
       setBackgroundMediaType(isVideo ? 'video' : 'image');
@@ -526,6 +523,7 @@ export default function App() {
       setPersistReady(true);
       return;
     }
+    // Restore all non-media state immediately, then hydrate background from IndexedDB.
     applyPosterSnapshot(snap, {
       setBackgroundImage,
       setBackgroundMediaType,
@@ -550,6 +548,10 @@ export default function App() {
       setPostScheduleTimeHm,
     });
     setPersistReady(true);
+    // Load background (image or video data URL) from IndexedDB — bypasses localStorage quota.
+    void loadBackgroundMedia().then((dataUrl) => {
+      if (dataUrl) setBackgroundImage(dataUrl);
+    });
   }, [isLoggedIn, resetStudioWorkspaceToBlank]);
 
   /* ── Fonts: splash waits until webfonts needed by the canvas can render ── */
@@ -636,9 +638,12 @@ export default function App() {
   useEffect(() => {
     if (!isLoggedIn || !persistReady) return;
     const timer = window.setTimeout(() => {
+      // Background media (especially video, but also large images) is stored in IndexedDB
+      // to avoid the ~5-10 MB localStorage quota. The session only stores a null placeholder.
+      void saveBackgroundMedia(backgroundImage);
       const saved = savePosterStudioSession({
         v: 1,
-        backgroundImage,
+        backgroundImage: null,
         backgroundMediaType,
         imageDimensions,
         isProfileTemplate,
@@ -663,7 +668,7 @@ export default function App() {
       if (!saved && !quotaWarningShownRef.current) {
         quotaWarningShownRef.current = true;
         toast.warning('Could not autosave workspace', {
-          description: 'The design may be too large for browser storage. Try a smaller background image.',
+          description: 'The design may be too large for browser storage. Try a smaller background.',
         });
       }
     }, 520);
@@ -748,6 +753,13 @@ export default function App() {
       // 1. Convert background to blob
       const bgBlob = await fetch(backgroundImage!).then(r => r.blob());
       const uploadContentType = normalizeBackgroundUploadContentType(bgBlob, backgroundImage);
+
+      // Guard: if we think this is a video but content-type detection resolved to an image type,
+      // the blob is likely corrupt or misidentified — abort rather than uploading with wrong type.
+      if (backgroundMediaType === 'video' && uploadContentType !== 'video/mp4') {
+        throw new Error('Could not confirm video format. Please re-upload the background and try again.');
+      }
+
       const uploadBlob =
         bgBlob.type === uploadContentType
           ? bgBlob
@@ -840,6 +852,10 @@ export default function App() {
   const handleDownloadRenderedImage = useCallback(async () => {
     if (!backgroundImage) {
       toast.error('No canvas image to download.');
+      return;
+    }
+    if (backgroundMediaType === 'video') {
+      toast.error('Cannot render a preview image for video backgrounds.');
       return;
     }
     try {
@@ -980,6 +996,7 @@ export default function App() {
     }
   }, [
     backgroundImage,
+    backgroundMediaType,
     canvasHeight,
     imageHolder,
     userPhoto,
@@ -1027,6 +1044,7 @@ export default function App() {
             size="sm"
             onClick={() => {
               clearPosterStudioSession();
+              void clearBackgroundMedia();
               resetStudioWorkspaceToBlank();
               clearToken();
               setIsLoggedIn(false);
@@ -1066,7 +1084,6 @@ export default function App() {
               <ImageUploader
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
-                mediaType={backgroundMediaType}
               />
               {!backgroundImage && (
                 <div className="mt-3 flex flex-wrap gap-1">

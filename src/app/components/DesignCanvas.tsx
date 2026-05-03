@@ -262,7 +262,7 @@ export function DesignCanvas({
     const isVideo = isVideoBackgroundFile(file);
     if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Only JPEG, PNG, WebP images or MP4 videos are allowed.',
+        description: 'Accepted: JPEG, PNG, WebP, or MP4.',
       });
       event.target.value = '';
       return;
@@ -448,7 +448,7 @@ export function DesignCanvas({
               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                 <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
-              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload an Image or MP4 to start</p>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload a background to start</p>
             </div>
           </label>
         )}

@@ -49,9 +49,9 @@ interface TemplateJSONFull {
 | `postName`          | string                      | Required display title; matches **`title`** on template create.   |
 | `publishLiveImmediately` | boolean               | **`true`** = visible as soon as the template/post is activated on the backend; **`false`** = use `scheduledAt`. |
 | `scheduledAt`       | string \| **`null`**        | ISO 8601 **UTC** for go-live time when not immediate (e.g. `"2026-05-03T06:30:00.000Z"`). **`null`** when immediate. |
-| `backgroundImage`   | string \| null              | **Object storage key** (e.g. `uploads/background-....jpg`) after presigned upload, or legacy `data:` / `https:` for tests. `null` = no background. |
-| `dominantColorHex`  | string \| null              | Hex `#RRGGBB` from the background image in the studio, or `null` if unknown. |
-| `mediaType`         | `'image'` \| `'video'`      | How to interpret `backgroundImage`. Current export path uses raster → `image`. |
+| `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png`/`.webp` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
+| `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image** in the editor. Always **`null`** for video backgrounds. |
+| `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPEG/PNG/WebP raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
 | `imagePlaceholder`  | `ImagePlaceholder`          | Photo frame position/shape/border config                          |
 | `namePlaceholder`   | `NamePlaceholder`           | Name text band position + text styling                            |
 
@@ -279,16 +279,22 @@ When `w === 0`, there is effectively **no stroke**.
   from the Poster Studio web tool into that internal model.
 - **`pn` (`postName`):** required human-facing name; persist with **`raw_config`** and align with **`title`** on poster-template create calls.
 - **`li` / `sa` (`publishLiveImmediately` / `scheduledAt`):** when `li` is `true`, expose the template/post as soon as it is persisted; when `false`, hold visibility until **`sa`** (parse as UTC ISO instant). Prefer **`sa === null`** when `li === true`.
-- **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production.
-- **`dc` / `dominantColorHex`:** optional metadata for search, theming, or client-side UI; safe to index as a string or `null`.
+- **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production. File extension reflects the type (`.mp4` for video).
+- **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
+- **`dc` / `dominantColorHex`:** always `null` for video backgrounds; optional for images. Safe to index as a string or `null`.
+- **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  
   `TEMPLATE_JSON_SCHEMA_FRONTEND.md` (frontend guide); this backend document
   is only about **data shape and meaning**.
 
 ---
 
-### 9. Changelog (April 2026 vs March 2026 baseline)
+### 9. Changelog
 
+#### May 2026
+- **Video support:** `mt` can now be `"video"` (MP4). `bg` key ends in `.mp4`. `dc` is always `null` for video. `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
+
+#### April 2026 (vs March 2026 baseline)
 - **`pn` → `postName`:** mandatory post title — mirrors **`title`** on template create requests.
 - **`li` / `sa` → `publishLiveImmediately` / `scheduledAt`:** post visibility — immediate (`sa: null`) vs scheduled UTC instant.
 - **`dc` → `dominantColorHex`:** new optional field.

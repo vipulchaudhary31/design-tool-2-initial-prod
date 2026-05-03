@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, ImageIcon, Film, RefreshCw } from 'lucide-react';
+import { Upload, ImageIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
@@ -14,10 +14,9 @@ function formatFileSize(bytes: number): string {
 interface ImageUploaderProps {
   onImageUpload: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   hasImage: boolean;
-  mediaType?: 'image' | 'video';
 }
 
-export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: ImageUploaderProps) {
+export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processChosenFile = (file: File, inputEl: HTMLInputElement) => {
@@ -26,7 +25,7 @@ export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: 
 
     if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Only JPEG, PNG, WebP images or MP4 videos are allowed.',
+        description: 'Accepted: JPEG, PNG, WebP, or MP4.',
       });
       inputEl.value = '';
       return;
@@ -79,16 +78,16 @@ export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: 
           </div>
           <div className="text-center">
             <p className="text-sm text-foreground/80">Upload Background</p>
-            <p className="text-xs text-muted-foreground mt-0.5">JPEG, PNG, WebP or MP4 · max 15 MB</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Image or video · max 15 MB</p>
           </div>
         </button>
       ) : (
         <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/45">
           <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-primary/[0.055] text-primary/75">
-            {mediaType === 'video' ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+            <ImageIcon className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-foreground/80">{mediaType === 'video' ? 'Video loaded' : 'Image loaded'}</p>
+            <p className="text-xs text-foreground/80">Background loaded</p>
             <p className="text-[11px] text-muted-foreground">Ready to design</p>
           </div>
           <Button

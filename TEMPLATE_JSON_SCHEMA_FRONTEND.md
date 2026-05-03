@@ -9,10 +9,12 @@ Target platform: **React Native, Android-first**.
 
 ## Canvas & design space
 
-The web editor uses a fixed **1080 × variable-height** canvas.  
-Heights are limited to: **1152, 1350, 1484, 1620** (for width 1080).
+The web editor uses a fixed **1080px wide** canvas. Height is variable and depends on the uploaded background:
 
-The `ar` field is a string `"W:H"` (reduced with GCD), e.g. `4:5` for a 1080×1350 canvas, not always literally `1080:1350`. **Do not** hardcode only `1080:…` values.
+- **Images** are validated against four allowed heights: **1152, 1350, 1484, 1620** (at width 1080).
+- **Videos** use the real video dimensions normalised to 1080px wide — any height is possible.
+
+The `ar` field is a string `"W:H"` (GCD-reduced), e.g. `4:5` for a 1080×1350 canvas, or `9:16` for a 1080×1920 video. **Do not** hardcode only known image ratios — `ar` can be any valid ratio string.
 
 **Parse `ar` and get design height:**
 
@@ -22,7 +24,7 @@ const designCanvasWidth = 1080;
 const designCanvasHeight = (1080 * h) / w;
 ```
 
-For the four supported editor sizes, that yields:
+For the four standard image sizes:
 
 | Canvas (W×H) | Typical `ar` in JSON* | `designCanvasHeight` |
 |--------------|------------------------|----------------------|
@@ -31,7 +33,7 @@ For the four supported editor sizes, that yields:
 | 1080 × 1484 | (e.g. `270:371` or reduced) | 1484 |
 | 1080 × 1620 | (e.g. `2:3`) | 1620 |
 
-\*Exact `ar` strings depend on GCD reduction; always derive size from the parsed ratio, not from a fixed table of strings.
+Video templates may produce any ratio — always derive canvas size from the parsed `ar`, never from a fixed table.
 
 At **render** time, scale to the device:
 
@@ -99,9 +101,9 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 | `pc` | string[]               | Primary category tags |
 | `lg` | string[]               | Language tags |
 | `pn` | string                 | **Post name** — required non-empty trimmed string; same text as **`title`** on template create API. |
-| `bg` | string \| `null`       | **Object storage key** for the background image (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. |
-| `dc` | string \| `null`       | **Dominant colour** of the background (`#RRGGBB`), from the image in the editor. Use for UI chrome, placeholders, or gradients when the bitmap is not loaded. |
-| `mt` | `"image"` \| `"video"` | Current studio export uses raster backgrounds → **`image`**. |
+| `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`/`.webp`; for videos it ends in `.mp4`. |
+| `dc` | string \| `null`       | **Dominant colour** of the background (`#RRGGBB`), sampled from images only. Always **`null`** for video backgrounds. Use for UI chrome or placeholders when media is not yet loaded. |
+| `mt` | `"image"` \| `"video"` | Background media type. **`"image"`** = JPEG/PNG/WebP; **`"video"`** = MP4. Use this to decide whether to render `<Image>` or `<Video>` in your app. |
 | `li` | boolean                | Default **`false`**: **`sa`** selects go-live (**scheduled**). Set **`true`** for immediate publish once saved/processed (**`sa`** → **`null`**). |
 | `sa` | string \| **`null`**   | ISO 8601 UTC when **`li`** is **`false`** (typically in the future at export time). **`null`** when **`li`** is **`true`**. |
 | `ip` | object                 | Photo placeholder |
@@ -219,11 +221,23 @@ React Native has no native text stroke. The editor stores one width + colour; ex
 
 ---
 
-## Background image URL
+## Background URL and media type
 
 If `bg` is a non-null string and does not start with `data:` or `http`, treat it as a **path/key** and join with your configured **media base URL** (same host the API used for upload).
 
 If you support older or test payloads, `bg` may still be a `data:` URL or full `https:` URL — handle both.
+
+**Always use `mt` to decide how to render the background:**
+
+```js
+if (json.mt === 'video') {
+  // render <Video source={{ uri: bgUri }} resizeMode="cover" repeat />
+} else {
+  // render <Image source={{ uri: bgUri }} resizeMode="cover" />
+}
+```
+
+**`dc` is always `null` for video backgrounds.** Don't rely on it for video templates — use a generic placeholder colour instead.
 
 ---
 
@@ -277,7 +291,10 @@ function PosterTemplate({ json, outputWidth, mediaBaseUrl, userName, userPhotoUr
 
   return (
     <View style={{ width: canvasWidth, height: canvasHeight, backgroundColor: json.dc ?? undefined }}>
-      {bgUri && (
+      {bgUri && json.mt === 'video' && (
+        <Video source={{ uri: bgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" repeat muted={false} />
+      )}
+      {bgUri && json.mt !== 'video' && (
         <Image source={{ uri: bgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       )}
 
@@ -368,3 +385,6 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 - **`dc` (dominant color):** added for theming; may be `null` if not computed.  
 - **`bg`:** production export is the **storage key** after upload, not an inline data URL.  
 - **`np`:** **x, w, h** are always serialized; name band is no longer “fixed width / centered only” in data — layout matches the editor.
+
+### May 2026
+- **Video backgrounds (`mt: "video"`):** studio now accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. `dc` is always `null` for video. `ar` may be any GCD-reduced ratio (not limited to the 4 image presets). Render with `<Video>` when `mt === "video"`.
