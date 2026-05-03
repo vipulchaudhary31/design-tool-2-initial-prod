@@ -173,4 +173,3 @@ export const TEMPLATE_KEY_MAP = {
   ia_dl: 'imageAnimation.delaySeconds',
   nl: 'nameLayout',
 } as const;
-

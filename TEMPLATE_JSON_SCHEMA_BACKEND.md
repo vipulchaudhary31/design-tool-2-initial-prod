@@ -350,4 +350,3 @@ When `w === 0`, there is effectively **no stroke**.
 - **`dc` → `dominantColorHex`:** dominant colour for theming / strip; current studio requires a `#RRGGBB` string ( **`#000000`** on failure ).
 - **`bg`:** production payloads use **object storage keys** after presigned upload; older docs assumed inline data URLs.
 - **`np`:** `x`, `w`, and `h` are always present in compact JSON (name band is fully specified).
-

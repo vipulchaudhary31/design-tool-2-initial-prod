@@ -437,6 +437,18 @@ export default function App() {
           : ALLOWED_CANVAS_SIZES[1].height;
         setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
       }
+      if (nameLayout === 'overlay') {
+        lastCustomTextStyleRef.current = {
+          ...textStyle,
+          textShadow: { ...textStyle.textShadow },
+          textStroke: { ...textStyle.textStroke },
+        };
+        lastCustomNameHolderRef.current = { ...nameHolder };
+      }
+      // New backgrounds should open in strip mode with the standard strip styling.
+      setTextStyle({ ...DEFAULT_TEXT_STYLE });
+      setNameHolder(defaultNameHolder());
+      setNameLayout('strip');
       setBackgroundImage(imageUrl);
       setBackgroundMediaType(isVideo ? 'video' : 'image');
       if (fileMeta?.name?.trim()) {
@@ -563,6 +575,45 @@ export default function App() {
   const [imageHolder, setImageHolder] = useState<ImagePlaceholder>(() => defaultImageHolder());
 
   const [nameHolder, setNameHolder] = useState<NamePlaceholder>(() => defaultNameHolder());
+  const lastCustomTextStyleRef = useRef<TextStyle>({ ...DEFAULT_TEXT_STYLE });
+  const lastCustomNameHolderRef = useRef<NamePlaceholder>(defaultNameHolder());
+
+  useEffect(() => {
+    if (nameLayout !== 'overlay') return;
+    lastCustomTextStyleRef.current = {
+      ...textStyle,
+      textShadow: { ...textStyle.textShadow },
+      textStroke: { ...textStyle.textStroke },
+    };
+    lastCustomNameHolderRef.current = { ...nameHolder };
+  }, [nameLayout, textStyle, nameHolder]);
+
+  const switchNameLayout = useCallback((nextLayout: 'strip' | 'overlay') => {
+    if (nextLayout === nameLayout) return;
+
+    if (nextLayout === 'strip') {
+      if (nameLayout === 'overlay') {
+        lastCustomTextStyleRef.current = {
+          ...textStyle,
+          textShadow: { ...textStyle.textShadow },
+          textStroke: { ...textStyle.textStroke },
+        };
+        lastCustomNameHolderRef.current = { ...nameHolder };
+      }
+      setTextStyle({ ...DEFAULT_TEXT_STYLE });
+      setNameHolder(defaultNameHolder());
+      setNameLayout('strip');
+      return;
+    }
+
+    setTextStyle({
+      ...lastCustomTextStyleRef.current,
+      textShadow: { ...lastCustomTextStyleRef.current.textShadow },
+      textStroke: { ...lastCustomTextStyleRef.current.textStroke },
+    });
+    setNameHolder({ ...lastCustomNameHolderRef.current });
+    setNameLayout('overlay');
+  }, [nameLayout, textStyle, nameHolder]);
 
   useEffect(() => {
     setImageHolder(prev => {
@@ -1038,20 +1089,23 @@ export default function App() {
         const d = imageHolder.diameter;
         const { px, py } = getAnimatedPhotoPosition(timeSec);
         const radius = photoShape === 'circle' ? d / 2 : photoCornerRadius;
+        const tracePhotoPath = (pathX: number, pathY: number, pathSize: number) => {
+          ctx.beginPath();
+          if (photoShape === 'circle') {
+            ctx.arc(pathX + pathSize / 2, pathY + pathSize / 2, pathSize / 2, 0, Math.PI * 2);
+          } else {
+            const rr = Math.max(0, Math.min(radius, pathSize / 2));
+            ctx.moveTo(pathX + rr, pathY);
+            ctx.arcTo(pathX + pathSize, pathY, pathX + pathSize, pathY + pathSize, rr);
+            ctx.arcTo(pathX + pathSize, pathY + pathSize, pathX, pathY + pathSize, rr);
+            ctx.arcTo(pathX, pathY + pathSize, pathX, pathY, rr);
+            ctx.arcTo(pathX, pathY, pathX + pathSize, pathY, rr);
+            ctx.closePath();
+          }
+        };
 
         ctx.save();
-        ctx.beginPath();
-        if (photoShape === 'circle') {
-          ctx.arc(px + d / 2, py + d / 2, d / 2, 0, Math.PI * 2);
-        } else {
-          const rr = Math.max(0, Math.min(radius, d / 2));
-          ctx.moveTo(px + rr, py);
-          ctx.arcTo(px + d, py, px + d, py + d, rr);
-          ctx.arcTo(px + d, py + d, px, py + d, rr);
-          ctx.arcTo(px, py + d, px, py, rr);
-          ctx.arcTo(px, py, px + d, py, rr);
-          ctx.closePath();
-        }
+        tracePhotoPath(px, py, d);
         ctx.clip();
         ctx.drawImage(pimg, px, py, d, d);
         ctx.restore();
@@ -1060,23 +1114,7 @@ export default function App() {
           ctx.save();
           ctx.strokeStyle = normalizeHex(photoStrokeColor, '#FFFFFF');
           ctx.lineWidth = photoStrokeWidth;
-          ctx.beginPath();
-          if (photoShape === 'circle') {
-            ctx.arc(px + d / 2, py + d / 2, d / 2 - photoStrokeWidth / 2, 0, Math.PI * 2);
-          } else {
-            const rr = Math.max(0, Math.min(radius, d / 2));
-            const inset = photoStrokeWidth / 2;
-            const x0 = px + inset;
-            const y0 = py + inset;
-            const w0 = d - photoStrokeWidth;
-            const h0 = d - photoStrokeWidth;
-            ctx.moveTo(x0 + rr, y0);
-            ctx.arcTo(x0 + w0, y0, x0 + w0, y0 + h0, rr);
-            ctx.arcTo(x0 + w0, y0 + h0, x0, y0 + h0, rr);
-            ctx.arcTo(x0, y0 + h0, x0, y0, rr);
-            ctx.arcTo(x0, y0, x0 + w0, y0, rr);
-            ctx.closePath();
-          }
+          tracePhotoPath(px + photoStrokeWidth / 2, py + photoStrokeWidth / 2, d - photoStrokeWidth);
           ctx.stroke();
           ctx.restore();
         }
@@ -1597,28 +1635,32 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Stroke */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="text-xs text-muted-foreground">Stroke Width</Label>
-                        <span className="text-[11px] font-mono text-muted-foreground">{photoStrokeWidth}px</span>
-                      </div>
-                      <Slider
-                        min={0} max={10} step={0.5}
-                        value={[photoStrokeWidth]}
-                        onValueChange={([v]) => setPhotoStrokeWidth(v)}
-                      />
-                    </div>
-                    {photoStrokeWidth > 0 && (
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-2">Stroke Color</Label>
-                        <ColorPicker
-                          value={photoStrokeColor}
-                          onChange={setPhotoStrokeColor}
-                          onBlur={() => setPhotoStrokeColor(normalizeHex(photoStrokeColor, '#FFFFFF'))}
-                          fallback="#FFFFFF"
-                        />
-                      </div>
+                    {photoHasBackground && (
+                      <>
+                        {/* Stroke */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-xs text-muted-foreground">Stroke Width</Label>
+                            <span className="text-[11px] font-mono text-muted-foreground">{photoStrokeWidth}px</span>
+                          </div>
+                          <Slider
+                            min={0} max={10} step={0.5}
+                            value={[photoStrokeWidth]}
+                            onValueChange={([v]) => setPhotoStrokeWidth(v)}
+                          />
+                        </div>
+                        {photoStrokeWidth > 0 && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-2">Stroke Color</Label>
+                            <ColorPicker
+                              value={photoStrokeColor}
+                              onChange={setPhotoStrokeColor}
+                              onBlur={() => setPhotoStrokeColor(normalizeHex(photoStrokeColor, '#FFFFFF'))}
+                              fallback="#FFFFFF"
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Shape */}
@@ -1731,7 +1773,7 @@ export default function App() {
                           <button
                             key={value}
                             type="button"
-                            onClick={() => setNameLayout(value)}
+                            onClick={() => switchNameLayout(value)}
                             className={segmentedToggleButtonClass(nameLayout === value)}
                           >
                             {label}
