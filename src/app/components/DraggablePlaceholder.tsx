@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
@@ -65,6 +65,7 @@ interface DraggablePlaceholderProps {
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
+  photoBlurBorders?: boolean;
   // ── Snap / selection props ──
   isSelected?: boolean;
   onSelect?: () => void;
@@ -162,6 +163,7 @@ export function DraggablePlaceholder({
   photoCornerRadius = 16,
   photoStrokeWidth = 0,
   photoStrokeColor = '#FFFFFF',
+  photoBlurBorders = false,
   isSelected = false,
   onSelect,
   otherRects = [],
@@ -528,6 +530,24 @@ export function DraggablePlaceholder({
   // ══════════════ RENDER: CIRCLE ══════════════
   if (type === 'circle') {
     const scaledDisplaySize = displayDiameter * safeScale;
+    const featherPx = Math.max(12, Math.min(scaledDisplaySize * 0.12, 34));
+    const sharpPhotoMaskStyle: CSSProperties | undefined = photoBlurBorders && previewPhoto
+      ? photoShape === 'circle'
+        ? {
+            WebkitMaskImage: 'radial-gradient(circle closest-side at center, #000 0%, #000 82%, rgba(0,0,0,0.94) 88%, rgba(0,0,0,0.58) 94%, transparent 100%)',
+            maskImage: 'radial-gradient(circle closest-side at center, #000 0%, #000 82%, rgba(0,0,0,0.94) 88%, rgba(0,0,0,0.58) 94%, transparent 100%)',
+            WebkitMaskMode: 'alpha',
+            maskMode: 'alpha',
+          }
+        : {
+            WebkitMaskImage: `linear-gradient(to right, transparent 0, rgba(0,0,0,0.58) ${featherPx * 0.36}px, rgba(0,0,0,0.94) ${featherPx * 0.68}px, #000 ${featherPx}px, #000 calc(100% - ${featherPx}px), rgba(0,0,0,0.94) calc(100% - ${featherPx * 0.68}px), rgba(0,0,0,0.58) calc(100% - ${featherPx * 0.36}px), transparent 100%), linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.58) ${featherPx * 0.36}px, rgba(0,0,0,0.94) ${featherPx * 0.68}px, #000 ${featherPx}px, #000 calc(100% - ${featherPx}px), rgba(0,0,0,0.94) calc(100% - ${featherPx * 0.68}px), rgba(0,0,0,0.58) calc(100% - ${featherPx * 0.36}px), transparent 100%)`,
+            maskImage: `linear-gradient(to right, transparent 0, rgba(0,0,0,0.58) ${featherPx * 0.36}px, rgba(0,0,0,0.94) ${featherPx * 0.68}px, #000 ${featherPx}px, #000 calc(100% - ${featherPx}px), rgba(0,0,0,0.94) calc(100% - ${featherPx * 0.68}px), rgba(0,0,0,0.58) calc(100% - ${featherPx * 0.36}px), transparent 100%), linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.58) ${featherPx * 0.36}px, rgba(0,0,0,0.94) ${featherPx * 0.68}px, #000 ${featherPx}px, #000 calc(100% - ${featherPx}px), rgba(0,0,0,0.94) calc(100% - ${featherPx * 0.68}px), rgba(0,0,0,0.58) calc(100% - ${featherPx * 0.36}px), transparent 100%)`,
+            WebkitMaskComposite: 'source-in',
+            maskComposite: 'intersect',
+            WebkitMaskMode: 'alpha',
+            maskMode: 'alpha',
+          } as CSSProperties
+      : undefined;
 
     return (
       <div
@@ -565,7 +585,22 @@ export function DraggablePlaceholder({
               }}
             >
               {previewPhoto ? (
-                <img src={previewPhoto} alt="User Photo" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+                photoBlurBorders ? (
+                  <img
+                    src={previewPhoto}
+                    alt="User Photo"
+                    className="w-full h-full object-cover pointer-events-none"
+                    style={sharpPhotoMaskStyle}
+                    draggable={false}
+                  />
+                ) : (
+                  <img
+                    src={previewPhoto}
+                    alt="User Photo"
+                    className="w-full h-full object-cover pointer-events-none"
+                    draggable={false}
+                  />
+                )
               ) : (
                 <div className="text-muted-foreground text-xs px-3 py-1.5 rounded-full text-center pointer-events-none">
                   {label}

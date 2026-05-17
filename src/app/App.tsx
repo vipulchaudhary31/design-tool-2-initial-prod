@@ -181,6 +181,7 @@ function applyPosterSnapshot(
     setPhotoHasBackground: (v: boolean) => void;
     setPhotoStrokeWidth: (v: number) => void;
     setPhotoStrokeColor: (v: string) => void;
+    setPhotoBlurBorders: (v: boolean) => void;
     setIsDarkMode: (v: boolean) => void;
     setTextStyle: Dispatch<SetStateAction<TextStyle>>;
     setImageHolder: Dispatch<SetStateAction<ImagePlaceholder>>;
@@ -205,6 +206,7 @@ function applyPosterSnapshot(
   apply.setPhotoHasBackground(snap.photoHasBackground);
   apply.setPhotoStrokeWidth(snap.photoStrokeWidth);
   apply.setPhotoStrokeColor(snap.photoStrokeColor);
+  apply.setPhotoBlurBorders(snap.photoBlurBorders ?? false);
   apply.setIsDarkMode(snap.isDarkMode);
   apply.setTextStyle(snap.textStyle);
   apply.setImageHolder(snap.imageHolder);
@@ -281,6 +283,111 @@ function ColorPicker({ value, onChange, onBlur, fallback = '#FFFFFF' }: {
   );
 }
 
+function tracePhotoShapePath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  shape: 'circle' | 'square',
+  cornerRadius: number,
+) {
+  ctx.beginPath();
+  if (shape === 'circle') {
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    return;
+  }
+
+  const rr = Math.max(0, Math.min(cornerRadius, size / 2));
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + size, y, x + size, y + size, rr);
+  ctx.arcTo(x + size, y + size, x, y + size, rr);
+  ctx.arcTo(x, y + size, x, y, rr);
+  ctx.arcTo(x, y, x + size, y, rr);
+  ctx.closePath();
+}
+
+function drawPhotoWithOptionalFeather(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  size: number,
+  shape: 'circle' | 'square',
+  cornerRadius: number,
+  blurBorders: boolean,
+) {
+  ctx.save();
+  tracePhotoShapePath(ctx, x, y, size, shape, cornerRadius);
+  ctx.clip();
+
+  if (!blurBorders) {
+    ctx.drawImage(image, x, y, size, size);
+    ctx.restore();
+    return;
+  }
+
+  const maskSize = Math.max(1, Math.round(size));
+  const sharpLayer = document.createElement('canvas');
+  sharpLayer.width = maskSize;
+  sharpLayer.height = maskSize;
+  const sharpCtx = sharpLayer.getContext('2d');
+  if (!sharpCtx) {
+    ctx.drawImage(image, x, y, size, size);
+    ctx.restore();
+    return;
+  }
+
+  sharpCtx.drawImage(image, 0, 0, maskSize, maskSize);
+
+  if (shape === 'circle') {
+    sharpCtx.globalCompositeOperation = 'destination-in';
+    const sharpGradient = sharpCtx.createRadialGradient(
+      maskSize / 2,
+      maskSize / 2,
+      0,
+      maskSize / 2,
+      maskSize / 2,
+      maskSize * 0.50,
+    );
+    sharpGradient.addColorStop(0, 'rgba(0,0,0,1)');
+    sharpGradient.addColorStop(0.82, 'rgba(0,0,0,1)');
+    sharpGradient.addColorStop(0.88, 'rgba(0,0,0,0.94)');
+    sharpGradient.addColorStop(0.94, 'rgba(0,0,0,0.58)');
+    sharpGradient.addColorStop(1, 'rgba(0,0,0,0)');
+    sharpCtx.fillStyle = sharpGradient;
+    sharpCtx.fillRect(0, 0, maskSize, maskSize);
+  } else {
+    const feather = Math.max(12, Math.min(maskSize * 0.12, 34));
+    const horizontal = sharpCtx.createLinearGradient(0, 0, maskSize, 0);
+    horizontal.addColorStop(0, 'rgba(0,0,0,0)');
+    horizontal.addColorStop((feather * 0.36) / maskSize, 'rgba(0,0,0,0.58)');
+    horizontal.addColorStop((feather * 0.68) / maskSize, 'rgba(0,0,0,0.94)');
+    horizontal.addColorStop(feather / maskSize, 'rgba(0,0,0,1)');
+    horizontal.addColorStop(1 - feather / maskSize, 'rgba(0,0,0,1)');
+    horizontal.addColorStop(1 - (feather * 0.68) / maskSize, 'rgba(0,0,0,0.94)');
+    horizontal.addColorStop(1 - (feather * 0.36) / maskSize, 'rgba(0,0,0,0.58)');
+    horizontal.addColorStop(1, 'rgba(0,0,0,0)');
+    sharpCtx.globalCompositeOperation = 'destination-in';
+    sharpCtx.fillStyle = horizontal;
+    sharpCtx.fillRect(0, 0, maskSize, maskSize);
+
+    const vertical = sharpCtx.createLinearGradient(0, 0, 0, maskSize);
+    vertical.addColorStop(0, 'rgba(0,0,0,0)');
+    vertical.addColorStop((feather * 0.36) / maskSize, 'rgba(0,0,0,0.58)');
+    vertical.addColorStop((feather * 0.68) / maskSize, 'rgba(0,0,0,0.94)');
+    vertical.addColorStop(feather / maskSize, 'rgba(0,0,0,1)');
+    vertical.addColorStop(1 - feather / maskSize, 'rgba(0,0,0,1)');
+    vertical.addColorStop(1 - (feather * 0.68) / maskSize, 'rgba(0,0,0,0.94)');
+    vertical.addColorStop(1 - (feather * 0.36) / maskSize, 'rgba(0,0,0,0.58)');
+    vertical.addColorStop(1, 'rgba(0,0,0,0)');
+    sharpCtx.fillStyle = vertical;
+    sharpCtx.fillRect(0, 0, maskSize, maskSize);
+  }
+
+  ctx.drawImage(sharpLayer, x, y, size, size);
+  ctx.restore();
+}
+
 export default function App() {
   /* ================= AUTH ================= */
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!getToken());
@@ -350,6 +457,7 @@ export default function App() {
   const [photoHasBackground, setPhotoHasBackground] = useState<boolean>(false);
   const [photoStrokeWidth, setPhotoStrokeWidth] = useState<number>(0);
   const [photoStrokeColor, setPhotoStrokeColor] = useState<string>('#FFFFFF');
+  const [photoBlurBorders, setPhotoBlurBorders] = useState<boolean>(false);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
 
   useLayoutEffect(() => {
@@ -652,6 +760,7 @@ export default function App() {
     setPhotoHasBackground(false);
     setPhotoStrokeWidth(0);
     setPhotoStrokeColor('#FFFFFF');
+    setPhotoBlurBorders(false);
     setIsDarkMode(true);
     setDominantColorHex(null);
     setTextStyle({ ...DEFAULT_TEXT_STYLE });
@@ -688,6 +797,7 @@ export default function App() {
       setPhotoHasBackground,
       setPhotoStrokeWidth,
       setPhotoStrokeColor,
+      setPhotoBlurBorders,
       setIsDarkMode,
       setTextStyle,
       setImageHolder,
@@ -807,6 +917,7 @@ export default function App() {
         photoHasBackground,
         photoStrokeWidth,
         photoStrokeColor,
+        photoBlurBorders,
         isDarkMode,
         textStyle,
         imageHolder,
@@ -841,6 +952,7 @@ export default function App() {
     photoHasBackground,
     photoStrokeWidth,
     photoStrokeColor,
+    photoBlurBorders,
     isDarkMode,
     textStyle,
     imageHolder,
@@ -962,6 +1074,7 @@ export default function App() {
           hb: photoHasBackground,
           sw: photoStrokeWidth,
           sc: safePhotoStrokeColor,
+          bb: photoBlurBorders,
         },
         np: {
           x: Math.round((nameHolder.x / CANVAS_WIDTH) * 100),
@@ -1089,32 +1202,20 @@ export default function App() {
         const d = imageHolder.diameter;
         const { px, py } = getAnimatedPhotoPosition(timeSec);
         const radius = photoShape === 'circle' ? d / 2 : photoCornerRadius;
-        const tracePhotoPath = (pathX: number, pathY: number, pathSize: number) => {
-          ctx.beginPath();
-          if (photoShape === 'circle') {
-            ctx.arc(pathX + pathSize / 2, pathY + pathSize / 2, pathSize / 2, 0, Math.PI * 2);
-          } else {
-            const rr = Math.max(0, Math.min(radius, pathSize / 2));
-            ctx.moveTo(pathX + rr, pathY);
-            ctx.arcTo(pathX + pathSize, pathY, pathX + pathSize, pathY + pathSize, rr);
-            ctx.arcTo(pathX + pathSize, pathY + pathSize, pathX, pathY + pathSize, rr);
-            ctx.arcTo(pathX, pathY + pathSize, pathX, pathY, rr);
-            ctx.arcTo(pathX, pathY, pathX + pathSize, pathY, rr);
-            ctx.closePath();
-          }
-        };
-
-        ctx.save();
-        tracePhotoPath(px, py, d);
-        ctx.clip();
-        ctx.drawImage(pimg, px, py, d, d);
-        ctx.restore();
+        drawPhotoWithOptionalFeather(ctx, pimg, px, py, d, photoShape, radius, photoBlurBorders);
 
         if (photoStrokeWidth > 0) {
           ctx.save();
           ctx.strokeStyle = normalizeHex(photoStrokeColor, '#FFFFFF');
           ctx.lineWidth = photoStrokeWidth;
-          tracePhotoPath(px + photoStrokeWidth / 2, py + photoStrokeWidth / 2, d - photoStrokeWidth);
+          tracePhotoShapePath(
+            ctx,
+            px + photoStrokeWidth / 2,
+            py + photoStrokeWidth / 2,
+            d - photoStrokeWidth,
+            photoShape,
+            radius,
+          );
           ctx.stroke();
           ctx.restore();
         }
@@ -1340,6 +1441,7 @@ export default function App() {
     photoCornerRadius,
     photoStrokeColor,
     photoStrokeWidth,
+    photoBlurBorders,
     photoAnimationPreset,
     photoAnimationDuration,
     nameHolder,
@@ -1608,6 +1710,7 @@ export default function App() {
             photoCornerRadius={photoCornerRadius}
             photoStrokeWidth={photoStrokeWidth}
             photoStrokeColor={photoStrokeColor}
+            photoBlurBorders={photoBlurBorders}
             onImageUpload={handleImageUpload}
             allowedCanvasSizes={ALLOWED_CANVAS_SIZES}
             photoAnimationPreset={photoAnimationPreset}
@@ -1633,6 +1736,14 @@ export default function App() {
                       <Switch
                         checked={photoHasBackground}
                         onCheckedChange={setPhotoHasBackground}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-foreground/80">Blur Borders</Label>
+                      <Switch
+                        checked={photoBlurBorders}
+                        onCheckedChange={setPhotoBlurBorders}
                       />
                     </div>
 

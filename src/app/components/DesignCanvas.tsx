@@ -43,6 +43,7 @@ interface DesignCanvasProps {
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
+  photoBlurBorders?: boolean;
   onImageUpload?: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   allowedCanvasSizes?: { height: number; label: string }[];
   photoAnimationPreset?: PhotoAnimationPreset;
@@ -92,6 +93,7 @@ export function DesignCanvas({
   photoCornerRadius = 16,
   photoStrokeWidth = 0,
   photoStrokeColor = '#000000',
+  photoBlurBorders = false,
   onImageUpload,
   allowedCanvasSizes,
   photoAnimationPreset = 'none',
@@ -526,6 +528,7 @@ export function DesignCanvas({
               samplePhoto={samplePhoto}
               photoShape={photoShape} photoCornerRadius={photoCornerRadius}
               photoStrokeWidth={photoStrokeWidth} photoStrokeColor={photoStrokeColor}
+              photoBlurBorders={photoBlurBorders}
               isSelected={selectedLayer === 'image'}
               onSelect={() => setSelectedLayer('image')}
               otherRects={otherRectsForImage}

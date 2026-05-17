@@ -47,6 +47,8 @@ export type CompactTemplateJSON = {
     sw: number;
     /** strokeColor (normalized hex) */
     sc: string;
+    /** blurBorders flag: feather photo alpha near edges so it merges with background */
+    bb: boolean;
   };
   /**
    * Name layout mode.
@@ -154,6 +156,7 @@ export const TEMPLATE_KEY_MAP = {
   ip_hb: 'imagePlaceholder.hasBackground',
   ip_sw: 'imagePlaceholder.strokeWidth',
   ip_sc: 'imagePlaceholder.strokeColor',
+  ip_bb: 'imagePlaceholder.blurBorders',
   np_x: 'namePlaceholder.x',
   np_y: 'namePlaceholder.y',
   np_w: 'namePlaceholder.width',

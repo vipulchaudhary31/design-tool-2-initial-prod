@@ -81,6 +81,7 @@ interface ImagePlaceholder {
   hasBackground: boolean;
   strokeWidthPx: number;
   strokeColor: string;       // hex
+  blurBorders: boolean;
 }
 ```
 
@@ -94,6 +95,7 @@ interface ImagePlaceholder {
 | `hasBackground`   | boolean               | `true` = user photo keeps background, `false` = cutout/PNG         |
 | `strokeWidthPx`   | number                | Photo border width (design px, 0 = none)                           |
 | `strokeColor`     | string (hex)          | Photo border colour                                                |
+| `blurBorders`     | boolean               | Feather alpha at the photo frame edge (`circle` / `square`) so it blends into the background |
 
 ---
 
@@ -252,6 +254,7 @@ All under `ip`:
 | `ip.hb`     | `imagePlaceholder.hasBackground`            | Has background — `true` = full photo, `false` = cutout PNG       |
 | `ip.sw`     | `imagePlaceholder.strokeWidthPx`            | Photo border (stroke) width in design px                         |
 | `ip.sc`     | `imagePlaceholder.strokeColor`              | Photo border (stroke) colour as hex string                       |
+| `ip.bb`     | `imagePlaceholder.blurBorders`              | Feather the photo frame edge for dynamic app rendering            |
 
 #### 7.2.1 `ia` — Image animation
 
@@ -325,6 +328,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
 - **`nl` / `nameLayout`:** persist as-is. When `"strip"`, ignore **`np` geometry** (`x`,`y`,`w`,`h`) and render the bottom strip using **`postName`** + **`np.st.ts`** for typography (≈ **6.5%** strip height, **80%** max text width default). When `"overlay"`, render full `np` as before.
 - **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
+- **`ip.bb` / `imagePlaceholder.blurBorders`:** persist this boolean with `raw_config`. Consumer renderers should feather the placeholder frame edge (`circle` / `square`) for both image and video backgrounds using an edge-only blurred ring/strip plus a sharp masked center. Do not attempt subject-edge detection and do not store a pre-rendered blurred user image in the template, because user photos are dynamic and can be transparent cutouts.
 - **`dc` / `dominantColorHex`:** sampled from **images and videos** in the editor (video: up to two frame samples, brighter result preferred). **Current export** always includes a hex string; failures normalize to **`#000000`**. Legacy payloads may store `null` — backends and clients should coerce to **`#000000`** for strip rendering. Used by **`nl === "strip"`** (strip = black mixed 50% with dominant).
 - **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  
@@ -337,7 +341,8 @@ When `w === 0`, there is effectively **no stroke**.
 
 #### May 2026
 - **Video support:** `mt` can be `"video"` (MP4). `bg` key ends in `.mp4`. **`dc` / `dominantColorHex`** are populated for **video** templates the same way as images (see quick summary). `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
-- **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`, `ia.dl`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
+- **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
+- **Blur borders (`ip.bb`):** compact payload now includes a boolean for edge-feathering the photo frame boundary on both image and video backgrounds.
 - **Name layout (`nl`):** `"strip"` (default) = bottom strip with `postName` + **`namePlaceholder.styling`** for type; **ignore band x/y/w/h**; strip ≈ **6.5%** of background height. `"overlay"` = full name placeholder. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** extracted for video backgrounds (multi-frame sampling in studio when possible). Failures map to **`#000000`** in new exports; strip fallback uses the same semantics as the frontend doc.
 

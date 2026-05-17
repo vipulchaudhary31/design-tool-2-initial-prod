@@ -37,6 +37,7 @@ export interface PosterStudioSessionPayload {
   photoHasBackground: boolean;
   photoStrokeWidth: number;
   photoStrokeColor: string;
+  photoBlurBorders: boolean;
   isDarkMode: boolean;
   textStyle: TextStyle;
   imageHolder: ImagePlaceholderPersisted;
@@ -165,6 +166,7 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
       photoHasBackground: typeof data.photoHasBackground === 'boolean' ? data.photoHasBackground : false,
       photoStrokeWidth: typeof data.photoStrokeWidth === 'number' ? data.photoStrokeWidth : 0,
       photoStrokeColor: typeof data.photoStrokeColor === 'string' ? data.photoStrokeColor : '#FFFFFF',
+      photoBlurBorders: typeof data.photoBlurBorders === 'boolean' ? data.photoBlurBorders : false,
       isDarkMode: typeof data.isDarkMode === 'boolean' ? data.isDarkMode : true,
       textStyle: textStyleParsed,
       imageHolder: { x: ih.x as number, y: ih.y as number, diameter: ih.diameter as number },
