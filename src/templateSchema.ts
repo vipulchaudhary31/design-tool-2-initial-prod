@@ -5,7 +5,7 @@ import type { PhotoShape } from './app/photoShapes';
 // the meaning of each short key for your dev team.
 
 export type CompactTemplateJSON = {
-  /** aspectRatio: e.g. "1080:1350" */
+  /** aspectRatio: GCD-reduced full poster ratio, e.g. "4:5" */
   ar: string;
   /** isProfileTemplate: true = Self (Profile), false = Wishes (Upload) */
   t: boolean;
@@ -15,7 +15,7 @@ export type CompactTemplateJSON = {
   lg: string[];
   /** postName — visible title / display name (required, non-empty) */
   pn: string;
-  /** backgroundImage (data URL) or null */
+  /** backgroundImage storage key/url or null */
   bg: string | null;
   /**
    * dominantColorHex from background media (`#RRGGBB`).

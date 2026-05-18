@@ -52,16 +52,16 @@ interface TemplateJSONFull {
 
 | Full name           | Type                        | Description                                                        |
 |---------------------|-----------------------------|--------------------------------------------------------------------|
-| `aspectRatio`       | string                      | `"W:H"` (often GCD-reduced, e.g. `4:5` for 1080×1350). Not always literally `1080:1350`. |
+| `aspectRatio`       | string                      | `"W:H"` (often GCD-reduced, e.g. `4:5` for 1080×1350). Any valid ratio is possible because uploads are no longer dimension-whitelisted. |
 | `isProfileTemplate` | boolean                     | `true` = Self/Profile, `false` = Wishes/Upload                    |
 | `primaryCategories` | string[]                    | Tags chosen in the editor (Self/Wishes categories)                |
 | `languageTags`      | string[]                    | Language labels (e.g. `["English","Hindi"]`)                      |
 | `postName`          | string                      | Required display title; matches **`title`** on template create.   |
 | `publishLiveImmediately` | boolean               | **`true`** = visible as soon as the template/post is activated on the backend; **`false`** = use `scheduledAt`. |
 | `scheduledAt`       | string \| **`null`**        | ISO 8601 **UTC** for go-live time when not immediate (e.g. `"2026-05-03T06:30:00.000Z"`). **`null`** when immediate. |
-| `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png`/`.webp` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
+| `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
 | `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image or video** in the editor. **Current studio** always persists a string ( **`#000000`** on failure ). **`null`** may appear on older templates — treat like **`#000000`** when rendering the strip. |
-| `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPEG/PNG/WebP raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
+| `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPG/JPEG/PNG raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
 | `nameLayout`        | `'strip'` \| `'overlay'`    | **`"strip"`** = fixed bottom strip with `postName`; ignore **`namePlaceholder` x/y/w/h**; apply **`styling.textStyle`** to strip text (same semantics as overlay). Strip height ≈ **6.5%** of background band. **`"overlay"`** = full `namePlaceholder` layout + styling. Default `"strip"`; missing → treat as `"overlay"`. |
 | `imageAnimation`    | `ImageAnimation` \| null    | Photo intro animation for video templates. `null` for image templates or when disabled. |
 | `imagePlaceholder`  | `ImagePlaceholder`          | Photo frame position/shape/border config                          |
@@ -330,7 +330,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
 - **`ip.bb` / `imagePlaceholder.blurBorders`:** persist this boolean with `raw_config`. Consumer renderers should feather the selected placeholder frame edge for both image and video backgrounds using the same shape path as `ip.sh`. Do not attempt subject-edge detection and do not store a pre-rendered blurred user image in the template, because user photos are dynamic and can be transparent cutouts.
 - **`dc` / `dominantColorHex`:** sampled from **images and videos** in the editor (video: up to two frame samples, brighter result preferred). **Current export** always includes a hex string; failures normalize to **`#000000`**. Legacy payloads may store `null` — backends and clients should coerce to **`#000000`** for strip rendering. Used by **`nl === "strip"`** (strip = black mixed 50% with dominant).
-- **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
+- **`ar` / `aspectRatio`:** any valid GCD-reduced ratio for both image and video templates. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  
   `TEMPLATE_JSON_SCHEMA_FRONTEND.md` (frontend guide); this backend document
   is only about **data shape and meaning**.
@@ -340,7 +340,8 @@ When `w === 0`, there is effectively **no stroke**.
 ### 9. Changelog
 
 #### May 2026
-- **Video support:** `mt` can be `"video"` (MP4). `bg` key ends in `.mp4`. **`dc` / `dominantColorHex`** are populated for **video** templates the same way as images (see quick summary). `ar` may be any GCD-reduced ratio — do not assume it is one of the four image presets. Persist `mt` alongside `bg` so consumer apps can render the correct media component.
+- **Background upload rules:** images accept JPG/JPEG/PNG up to **5 MB** and videos accept MP4 up to **100 MB**. No dimension/aspect-ratio whitelist remains; `ar` may be any GCD-reduced ratio.
+- **Video support:** `mt` can be `"video"` (MP4). `bg` key ends in `.mp4`. **`dc` / `dominantColorHex`** are populated for **video** templates the same way as images (see quick summary). Persist `mt` alongside `bg` so consumer apps can render the correct media component.
 - **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
 - **Blur borders (`ip.bb`):** compact payload now includes a boolean for edge-feathering the photo frame boundary on both image and video backgrounds.
 - **Name layout (`nl`):** `"strip"` (default) = bottom strip with `postName` + **`namePlaceholder.styling`** for type; **ignore band x/y/w/h**; strip ≈ **6.5%** of background height. `"overlay"` = full name placeholder. Missing `nl` → `"overlay"`.

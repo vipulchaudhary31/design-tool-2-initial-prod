@@ -109,13 +109,6 @@ function isVideoBackgroundUrl(url: string): boolean {
   return /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url);
 }
 
-const ALLOWED_CANVAS_SIZES = [
-  { height: 1152, label: '1080 x 1152' },
-  { height: 1350, label: '1080 x 1350' },
-  { height: 1484, label: '1080 x 1484' },
-  { height: 1620, label: '1080 x 1620' },
-];
-
 function computeAspectRatioString(width: number, height: number): string {
   const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
   const d = gcd(width, height);
@@ -584,24 +577,10 @@ export default function App() {
     const isVideo = fileMeta?.mediaType === 'video';
 
     const applyBackground = (srcWidth: number, srcHeight: number) => {
-      if (!isVideo) {
-        const normalizedHeight = Math.round((CANVAS_WIDTH / srcWidth) * srcHeight);
-        const matched = ALLOWED_CANVAS_SIZES.find(
-          size => Math.abs(normalizedHeight - size.height) <= 5
-        );
-        if (!matched) {
-          toast.error('Unsupported aspect ratio', {
-            description: `Accepted: ${ALLOWED_CANVAS_SIZES.map(s => s.label).join(', ')}`,
-          });
-          return;
-        }
-        setImageDimensions({ width: CANVAS_WIDTH, height: matched.height });
-      } else {
-        const normalizedHeight = srcWidth > 0 && srcHeight > 0
-          ? Math.round((CANVAS_WIDTH / srcWidth) * srcHeight)
-          : ALLOWED_CANVAS_SIZES[1].height;
-        setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
-      }
+      const normalizedHeight = srcWidth > 0 && srcHeight > 0
+        ? Math.round((CANVAS_WIDTH / srcWidth) * srcHeight)
+        : 1350;
+      setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
       if (nameLayout === 'overlay') {
         lastCustomTextStyleRef.current = {
           ...textStyle,
@@ -1636,15 +1615,6 @@ export default function App() {
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
               />
-              {!backgroundImage && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {ALLOWED_CANVAS_SIZES.map(size => (
-                    <span key={size.height} className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
-                      {size.label}
-                    </span>
-                  ))}
-                </div>
-              )}
             </PanelSection>
 
             {/* Locked section stubs — visible but inactive until a background is uploaded */}
@@ -1798,7 +1768,6 @@ export default function App() {
             canvasWidth={CANVAS_WIDTH}
             canvasHeight={canvasHeight}
             posterCanvasHeight={posterCanvasHeight}
-            aspectRatio={aspectRatioString}
             userName={userName}
             fontSize={textStyle.fontSize}
             fontWeight={textStyle.fontWeight}
@@ -1821,7 +1790,6 @@ export default function App() {
             photoBlurBorders={photoBlurBorders}
             onImageUpload={handleImageUpload}
             onStickerHolderChange={setStickerHolder}
-            allowedCanvasSizes={ALLOWED_CANVAS_SIZES}
             photoAnimationPreset={photoAnimationPreset}
             photoAnimationDuration={photoAnimationDuration}
             photoAnimationReplayTick={photoAnimationReplayTick}

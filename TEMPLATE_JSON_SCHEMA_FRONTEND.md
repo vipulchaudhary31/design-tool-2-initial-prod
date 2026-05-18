@@ -11,12 +11,12 @@ Target platform: **React Native, Android-first**.
 
 The web editor uses a fixed **1080px wide** canvas. The **background media** height is variable and depends on the upload:
 
-- **Images** are validated against four allowed heights: **1152, 1350, 1484, 1620** (at width 1080).
-- **Videos** use the real video dimensions normalised to 1080px wide — any height is possible.
+- **Images:** JPG/JPEG/PNG only, max **5 MB**. Any dimensions/aspect ratio are accepted and normalized to 1080px wide.
+- **Videos:** MP4 only, max **100 MB**. Any dimensions/aspect ratio are accepted and normalized to 1080px wide.
 
 When **`nl === "strip"`**, the logical poster is **taller** than the background alone: a name strip is attached **below** the background (not drawn on top of it). The exported `ar` reflects the **full poster** size (background height + strip height). When **`nl === "overlay"`**, `ar` matches the background only (legacy).
 
-The `ar` field is a string `"W:H"` (GCD-reduced). **Do not** hardcode only known image ratios — `ar` can be any valid ratio string.
+The `ar` field is a string `"W:H"` (GCD-reduced). **Do not** hardcode known ratios — `ar` can be any valid ratio string for both images and videos.
 
 **Parse `ar` and get design height:**
 
@@ -26,16 +26,7 @@ const designCanvasWidth = 1080;
 const designCanvasHeight = (1080 * h) / w;
 ```
 
-For the four standard image sizes:
-
-| Canvas (W×H) | Typical `ar` in JSON* | `designCanvasHeight` |
-|--------------|------------------------|----------------------|
-| 1080 × 1152 | (e.g. `15:16` or similar) | 1152 |
-| 1080 × 1350 | (e.g. `4:5`) | 1350 |
-| 1080 × 1484 | (e.g. `270:371` or reduced) | 1484 |
-| 1080 × 1620 | (e.g. `2:3`) | 1620 |
-
-Video templates may produce any ratio — always derive canvas size from the parsed `ar`, never from a fixed table.
+Always derive canvas size from the parsed `ar`, never from a fixed table.
 
 At **render** time, scale to the device:
 
@@ -108,9 +99,9 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 | `pc` | string[]               | Primary category tags |
 | `lg` | string[]               | Language tags |
 | `pn` | string                 | **Post name** — required non-empty trimmed string; same text as **`title`** on template create API. |
-| `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`/`.webp`; for videos it ends in `.mp4`. |
+| `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`; for videos it ends in `.mp4`. |
 | `dc` | string (see note)     | **Dominant colour** (`#RRGGBB`) sampled from the background **image or video** (Color Thief). **Current studio** always emits a hex string; on extraction failure it sends **`#000000`**. Legacy payloads may use `null` or omit the key — treat those like **`#000000`** for strip rendering. |
-| `mt` | `"image"` \| `"video"` | Background media type. **`"image"`** = JPEG/PNG/WebP; **`"video"`** = MP4. Use this to decide whether to render `<Image>` or `<Video>` in your app. |
+| `mt` | `"image"` \| `"video"` | Background media type. **`"image"`** = JPG/JPEG/PNG; **`"video"`** = MP4. Use this to decide whether to render `<Image>` or `<Video>` in your app. |
 | `nl` | `"strip"` \| `"overlay"` | **`"strip"`** = fixed bottom strip, text from **`pn`**, typography from **`np.st.ts`** (ignore **`np.x/y/w/h`**). **`"overlay"`** = full `np`. Missing `nl` → treat as `"overlay"`. |
 | `ia` | object \| `null`       | Photo intro animation config. Present only for video templates when enabled; otherwise `null`. |
 | `li` | boolean                | Default **`false`**: **`sa`** selects go-live (**scheduled**). Set **`true`** for immediate publish once saved/processed (**`sa`** → **`null`**). |
@@ -504,7 +495,8 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 - **`np`:** **x, w, h** are always serialized; name band is no longer “fixed width / centered only” in data — layout matches the editor.
 
 ### May 2026
-- **Video backgrounds (`mt: "video"`):** studio accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. **`dc`** is sampled for **videos** as well as images (see strip section). `ar` may be any GCD-reduced ratio (not limited to the 4 image presets). Render with `<Video>` when `mt === "video"`.
+- **Background upload rules:** images accept JPG/JPEG/PNG up to **5 MB** and videos accept MP4 up to **100 MB**. No dimension/aspect-ratio whitelist remains; all backgrounds are normalized into the 1080-wide design space.
+- **Video backgrounds (`mt: "video"`):** studio accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. **`dc`** is sampled for **videos** as well as images (see strip section). `ar` may be any GCD-reduced ratio. Render with `<Video>` when `mt === "video"`.
 - **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`). Applies to the **photo layer** (`ip`), not the name text layer.
 - **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height **6.5%** of background band; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** `dc` is extracted for **video** backgrounds (one or two frame samples; brighter result preferred) as well as images. Studio normalizes to **`#000000`** when sampling fails. Strip mode mixes black at 50% with `dc`; fallback dominant = **`#000000`**. Older docs incorrectly stated `dc` was always `null` for video.

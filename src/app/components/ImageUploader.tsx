@@ -2,9 +2,12 @@ import { useRef } from 'react';
 import { Upload, ImageIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
-import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+import {
+  isRasterBackgroundFile,
+  isVideoBackgroundFile,
+  MAX_BACKGROUND_IMAGE_BYTES,
+  MAX_BACKGROUND_VIDEO_BYTES,
+} from '@/utils/isRasterBackgroundFile';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -25,14 +28,15 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
 
     if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Accepted: JPEG, PNG, WebP, or MP4.',
+        description: 'Accepted: JPG, JPEG, PNG, or MP4.',
       });
       inputEl.value = '';
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
+    const maxFileSize = isVideo ? MAX_BACKGROUND_VIDEO_BYTES : MAX_BACKGROUND_IMAGE_BYTES;
+    if (file.size > maxFileSize) {
       toast.error(`File too large (${formatFileSize(file.size)})`, {
-        description: 'Files must be under 50 MB.',
+        description: isVideo ? 'Videos must be under 100 MB.' : 'Images must be under 5 MB.',
       });
       inputEl.value = '';
       return;
@@ -62,7 +66,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".jpg,.jpeg,.jfif,.png,.webp,.mp4,image/jpeg,image/png,image/webp,video/mp4"
+        accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -78,7 +82,7 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
           </div>
           <div className="text-center">
             <p className="text-sm text-foreground/80">Upload Background</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Image or video · max 50 MB</p>
+            <p className="text-xs text-muted-foreground mt-0.5">JPG/PNG up to 5 MB · MP4 up to 100 MB</p>
           </div>
         </button>
       ) : (

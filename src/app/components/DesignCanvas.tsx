@@ -9,11 +9,14 @@ import { circleToRect, nameToRect, computeDistances, KEYBOARD_STEP, KEYBOARD_SHI
 import type { Rect, SnapGuide, DistanceIndicator } from './snap-engine';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
+import {
+  isRasterBackgroundFile,
+  isVideoBackgroundFile,
+  MAX_BACKGROUND_IMAGE_BYTES,
+  MAX_BACKGROUND_VIDEO_BYTES,
+} from '@/utils/isRasterBackgroundFile';
 import { stripDesignHeightPx, nameStripBackgroundHex } from '@/utils/nameStripStyle';
 import type { PhotoShape } from '../photoShapes';
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
 interface ImagePlaceholder { x: number; y: number; diameter: number; }
@@ -29,7 +32,6 @@ interface DesignCanvasProps {
   onStickerHolderChange?: (pos: StickerHolder) => void;
   canvasWidth: number;
   canvasHeight: number;
-  aspectRatio: string;
   userName?: string;
   fontSize?: number;
   fontWeight?: number;
@@ -51,7 +53,6 @@ interface DesignCanvasProps {
   photoStrokeColor?: string;
   photoBlurBorders?: boolean;
   onImageUpload?: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
-  allowedCanvasSizes?: { height: number; label: string }[];
   photoAnimationPreset?: PhotoAnimationPreset;
   photoAnimationDuration?: number;
   photoAnimationReplayTick?: number;
@@ -104,7 +105,6 @@ export function DesignCanvas({
   photoStrokeColor = '#000000',
   photoBlurBorders = false,
   onImageUpload,
-  allowedCanvasSizes,
   photoAnimationPreset = 'none',
   photoAnimationDuration = 2.0,
   photoAnimationReplayTick = 0,
@@ -295,13 +295,16 @@ export function DesignCanvas({
     const isVideo = isVideoBackgroundFile(file);
     if (!isImage && !isVideo) {
       toast.error('Unsupported file format', {
-        description: 'Accepted: JPEG, PNG, WebP, or MP4.',
+        description: 'Accepted: JPG, JPEG, PNG, or MP4.',
       });
       event.target.value = '';
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File too large`, { description: 'Files must be under 50 MB.' });
+    const maxFileSize = isVideo ? MAX_BACKGROUND_VIDEO_BYTES : MAX_BACKGROUND_IMAGE_BYTES;
+    if (file.size > maxFileSize) {
+      toast.error('File too large', {
+        description: isVideo ? 'Videos must be under 100 MB.' : 'Images must be under 5 MB.',
+      });
       event.target.value = '';
       return;
     }
@@ -509,7 +512,7 @@ export function DesignCanvas({
           <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-primary/5 transition-all group">
             <input
               type="file"
-              accept=".jpg,.jpeg,.jfif,.png,.webp,.mp4,image/jpeg,image/png,image/webp,video/mp4"
+              accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
               className="hidden"
               onChange={handleImageUpload}
             />

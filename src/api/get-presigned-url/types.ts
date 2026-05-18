@@ -1,4 +1,4 @@
-export type ImageContentType = 'image/jpeg' | 'image/webp' | 'image/png';
+export type ImageContentType = 'image/jpeg' | 'image/png';
 export type VideoContentType = 'video/mp4';
 export type BackgroundContentType = ImageContentType | VideoContentType;
 

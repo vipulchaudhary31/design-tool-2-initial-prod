@@ -1,19 +1,20 @@
 import type { BackgroundContentType, ImageContentType } from '@/api/get-presigned-url/types';
 
+export const MAX_BACKGROUND_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_BACKGROUND_VIDEO_BYTES = 100 * 1024 * 1024;
+
 const JPEG_MIME = new Set([
   'image/jpeg',
   'image/jpg',
-  'image/pjpeg',
-  'image/jfif',
 ]);
 
-const RASTER_EXT = /\.(jpe?g|jfif|png|webp)$/i;
+const RASTER_EXT = /\.(jpe?g|png)$/i;
 const VIDEO_EXT = /\.mp4$/i;
 
 export function isRasterBackgroundFile(file: File): boolean {
   const type = (file.type || '').toLowerCase().trim();
   if (type) {
-    if (type === 'image/png' || type === 'image/webp') return true;
+    if (type === 'image/png') return true;
     if (JPEG_MIME.has(type)) return true;
     return false;
   }
@@ -33,7 +34,6 @@ export function isBackgroundFile(file: File): boolean {
 
 export function extensionForRasterContentType(contentType: ImageContentType): string {
   if (contentType === 'image/png') return 'png';
-  if (contentType === 'image/webp') return 'webp';
   return 'jpg';
 }
 
@@ -46,7 +46,7 @@ export function rasterContentTypeFromDataUrl(dataUrl: string): ImageContentType 
   const m = /^data:([^;,]+)/i.exec(dataUrl);
   if (!m) return null;
   const mime = m[1].trim().toLowerCase();
-  if (mime === 'image/png' || mime === 'image/webp') return mime;
+  if (mime === 'image/png') return mime;
   if (JPEG_MIME.has(mime)) return 'image/jpeg';
   return null;
 }
@@ -57,7 +57,7 @@ export function normalizeBackgroundUploadContentType(
 ): BackgroundContentType {
   const mime = (blob.type || '').toLowerCase().trim();
   if (mime === 'video/mp4') return 'video/mp4';
-  if (mime === 'image/png' || mime === 'image/webp' || mime === 'image/jpeg') return mime;
+  if (mime === 'image/png' || mime === 'image/jpeg') return mime;
   if (mime && JPEG_MIME.has(mime)) return 'image/jpeg';
 
   if (dataUrl && dataUrl.startsWith('data:')) {
