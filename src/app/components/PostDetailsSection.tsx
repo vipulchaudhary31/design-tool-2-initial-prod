@@ -1,6 +1,5 @@
-import { format, parse as parseTime, startOfToday } from 'date-fns';
+import { format, startOfToday } from 'date-fns';
 import { CalendarIcon, Clock, Zap } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Calendar } from '@/app/components/ui/calendar';
 import { Input } from '@/app/components/ui/input';
@@ -11,17 +10,36 @@ import { Switch } from '@/app/components/ui/switch';
 import { cn } from '@/app/components/ui/utils';
 import { parseDateKeyToLocalDate } from '@/utils/postSchedule';
 
-const HOURLY_TIME_OPTIONS = Array.from({ length: 24 }, (_, h) =>
-  `${String(h).padStart(2, '0')}:00`);
+function normalizeTimeDraft(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
 
-function hourlySlotDisplay(hm: string): string {
-  return format(parseTime(hm, 'HH:mm', new Date()), 'h:mm a');
-}
+  let hhS = '';
+  let mmS = '';
+  const colonMatch = /^(\d{1,2}):(\d{1,2})$/.exec(raw);
+  if (colonMatch) {
+    [, hhS, mmS] = colonMatch;
+  } else if (/^\d{1,4}$/.test(raw)) {
+    if (raw.length <= 2) {
+      hhS = raw;
+      mmS = '0';
+    } else if (raw.length === 3) {
+      hhS = raw.slice(0, 1);
+      mmS = raw.slice(1);
+    } else {
+      hhS = raw.slice(0, 2);
+      mmS = raw.slice(2);
+    }
+  } else {
+    return null;
+  }
 
-function canonicalHourHm(hm: string): string {
-  const raw = hm.trim().split(':')[0];
-  const hh = Math.min(23, Math.max(0, Number.parseInt(raw ?? '0', 10) || 0));
-  return `${String(hh).padStart(2, '0')}:00`;
+  const hh = Number(hhS);
+  const mm = Number(mmS);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    return null;
+  }
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
 interface PostDetailsSectionProps {
@@ -46,8 +64,6 @@ export function PostDetailsSection({
   onScheduleTimeHmChange,
 }: PostDetailsSectionProps) {
   const selectedDate = parseDateKeyToLocalDate(scheduleDateKey) ?? startOfToday();
-  const [hourPickOpen, setHourPickOpen] = useState(false);
-  const currentHourHm = canonicalHourHm(scheduleTimeHm);
 
   return (
     <div className="space-y-5">
@@ -98,46 +114,28 @@ export function PostDetailsSection({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Time</Label>
-            <Popover open={hourPickOpen} onOpenChange={setHourPickOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-full justify-start gap-2 text-left text-xs font-normal shadow-none disabled:!opacity-100"
-                  disabled={liveImmediately}
-                >
-                  <Clock className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                  <span className="font-mono tabular-nums">{hourlySlotDisplay(currentHourHm)}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" sideOffset={4} className="w-[10.5rem] p-1">
-                <div
-                  className="max-h-52 overflow-y-auto overscroll-contain rounded-sm"
-                  role="listbox"
-                  aria-label="Hourly times"
-                >
-                  {HOURLY_TIME_OPTIONS.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      role="option"
-                      aria-selected={currentHourHm === slot}
-                      className={cn(
-                        'flex w-full items-center rounded-sm px-2 py-2 text-left text-xs tabular-nums transition-colors hover:bg-accent hover:text-accent-foreground',
-                        currentHourHm === slot ? 'bg-primary/12 text-primary' : '',
-                      )}
-                      onClick={() => {
-                        onScheduleTimeHmChange(slot);
-                        setHourPickOpen(false);
-                      }}
-                    >
-                      {hourlySlotDisplay(slot)}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="post-schedule-time" className="text-xs text-muted-foreground">Time</Label>
+            <div className="relative">
+              <Clock className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground opacity-70" aria-hidden />
+              <Input
+                id="post-schedule-time"
+                type="text"
+                inputMode="numeric"
+                placeholder="HH:mm (24h)"
+                value={scheduleTimeHm}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (/^[0-9:]{0,5}$/.test(value)) onScheduleTimeHmChange(value);
+                }}
+                onBlur={(e) => {
+                  const normalized = normalizeTimeDraft(e.target.value);
+                  if (normalized) onScheduleTimeHmChange(normalized);
+                }}
+                disabled={liveImmediately}
+                className="h-9 pl-8 text-xs font-mono tabular-nums shadow-none disabled:!opacity-100"
+                autoComplete="off"
+              />
+            </div>
           </div>
         </div>
 

@@ -21,9 +21,11 @@ export function parseDateKeyToLocalDate(ymd: string): Date | null {
 export function localYmdHmToISO(ymd: string, timeHm: string): string {
   const base = parseDateKeyToLocalDate(ymd);
   if (!base) throw new Error('Invalid date');
-  const [hhS, mmS] = timeHm.trim().split(':');
+  const match = /^(\d{2}):(\d{2})$/.exec(timeHm.trim());
+  if (!match) throw new Error('Invalid time');
+  const [, hhS, mmS] = match;
   const hh = Number(hhS);
-  const mi = Number(mmS ?? 0);
+  const mi = Number(mmS);
   if (!Number.isFinite(hh) || !Number.isFinite(mi) || hh < 0 || hh > 23 || mi < 0 || mi > 59) {
     throw new Error('Invalid time');
   }
