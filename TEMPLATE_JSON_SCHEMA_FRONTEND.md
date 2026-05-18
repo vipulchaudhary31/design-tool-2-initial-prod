@@ -14,7 +14,7 @@ The web editor uses a fixed **1080px wide** canvas. The **background media** hei
 - **Images:** JPG/JPEG/PNG only, max **5 MB**. Any dimensions/aspect ratio are accepted and normalized to 1080px wide.
 - **Videos:** MP4 only, max **100 MB**. Any dimensions/aspect ratio are accepted and normalized to 1080px wide.
 
-When **`nl === "strip"`**, the logical poster is **taller** than the background alone: a name strip is attached **below** the background (not drawn on top of it). The exported `ar` reflects the **full poster** size (background height + strip height). When **`nl === "overlay"`**, `ar` matches the background only (legacy).
+When **`nl === "strip"`**, the logical poster is **taller** than the background alone: a name strip is attached **below** the background (not drawn on top of it). The exported `ar` reflects the **full poster** size (background height + fixed 72px strip). When **`nl === "overlay"`**, `ar` matches the background only (legacy).
 
 The `ar` field is a string `"W:H"` (GCD-reduced). **Do not** hardcode known ratios — `ar` can be any valid ratio string for both images and videos.
 
@@ -46,7 +46,7 @@ const scale = outputCanvasWidth / 1080;
 ```
 
 **Scale these by `scale`:**
-- `np.st.ts.fs` — font size  
+- `np.st.ts.fs` — font size. In strip mode the studio now exports this as a fixed **54px**.  
 - `np.st.ts.ls` — letter spacing  
 - `np.st.ts.sh.ox`, `np.st.ts.sh.oy`, `np.st.ts.sh.bl` — shadow  
 - `ip.sw` — photo border width  
@@ -214,7 +214,7 @@ The renderer must check `nl` before deciding how to draw the name.
 ### `nl === "strip"` (default for new templates)
 
 - **Render a fixed full-width strip attached to the bottom edge of the *background*** — the poster’s total height = background band + strip (strip is **not** overlaid on the video/image pixels).
-- Strip height (design px): **`round(backgroundHeightPx × 0.065)`** (`NAME_STRIP_HEIGHT_PERCENT = 6.5` on the background band **before** adding the strip).
+- Strip height (design px): fixed **`72`**.
 - Strip background colour: pure black mixed with the dominant background colour (`dc`) at **50% opacity** — i.e. `R/G/B` of `dc` divided by 2. If `dc` is missing, `null`, or invalid, treat it as **`#000000`** (strip background is then pure black).
 - **Text:** render **`pn`** using the same compact fields as overlay mode: **`np.st.ts`** — `fs` (font size, design px), `fw`, `c` (colour), `ls` (letter spacing), `sh` (shadow or `null`), `st` (stroke), `ta` (alignment). Vertically centre in the strip; horizontal padding should account for stroke/shadow like the overlay name band. **Single line**, ellipsis if needed. **Max width** of the text line: **80%** of canvas width (studio default; not a separate key in JSON today).
 - **Ignore `np` geometry** for strip mode only: **`np.x` / `np.y` / `np.w` / `np.h`** do not position the strip text (the strip is full width). Do **not** ignore **`np.st.ts`** — it drives strip typography.
@@ -498,5 +498,5 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 - **Background upload rules:** images accept JPG/JPEG/PNG up to **5 MB** and videos accept MP4 up to **100 MB**. No dimension/aspect-ratio whitelist remains; all backgrounds are normalized into the 1080-wide design space.
 - **Video backgrounds (`mt: "video"`):** studio accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. **`dc`** is sampled for **videos** as well as images (see strip section). `ar` may be any GCD-reduced ratio. Render with `<Video>` when `mt === "video"`.
 - **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`). Applies to the **photo layer** (`ip`), not the name text layer.
-- **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height **6.5%** of background band; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
+- **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height fixed at **72px** and strip font size fixed at **54px**; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** `dc` is extracted for **video** backgrounds (one or two frame samples; brighter result preferred) as well as images. Studio normalizes to **`#000000`** when sampling fails. Strip mode mixes black at 50% with `dc`; fallback dominant = **`#000000`**. Older docs incorrectly stated `dc` was always `null` for video.

@@ -56,8 +56,8 @@ export type CompactTemplateJSON = {
    * Name layout mode.
    * - "strip"   = fixed full-width strip below the background with text from `pn`.
    *              Ignore `np.x` / `np.y` / `np.w` / `np.h` for layout. Use `np.st.ts`
-   *              for typography (same fields as overlay: `fs`, `fw`, `c`, `ls`, `sh`,
-   *              `st`, `ta`). Strip height = `round(backgroundHeight × 0.065)` (6.5%).
+   *              for typography (`fw`, `c`, `ls`, `sh`, `st`, `ta`). `fs` is fixed
+   *              to 54 design px in strip mode. Strip height is fixed at 72 design px.
    *              Strip background = black mixed 50% with `dc` (RGB = dc/2).
    *              Max text width: **80%** of canvas (not currently a separate JSON key;
    *              matches studio default `maxWidthPercent`).

@@ -10,12 +10,15 @@
 
 import { dominantColorHexOrBlack } from '@/utils/dominantColorHex';
 
-/** Strip height as a % of the **background media** region (not incl. strip). */
-export const NAME_STRIP_HEIGHT_PERCENT = 6.5; // % of canvas height
+/** Fixed design-pixel height of the strip attached below the background region. */
+export const NAME_STRIP_HEIGHT_PX = 72;
 
-/** Design-pixel height of the strip attached *below* the background (rounded). */
+/** Fixed design-pixel font size for strip text. */
+export const NAME_STRIP_FONT_SIZE_PX = 54;
+
 export function stripDesignHeightPx(backgroundDesignHeightPx: number): number {
-  return Math.round((backgroundDesignHeightPx * NAME_STRIP_HEIGHT_PERCENT) / 100);
+  void backgroundDesignHeightPx;
+  return NAME_STRIP_HEIGHT_PX;
 }
 
 /** Total poster height = background band + strip (strip only when caller uses strip layout). */

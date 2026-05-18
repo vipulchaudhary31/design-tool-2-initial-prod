@@ -15,7 +15,7 @@ import {
   MAX_BACKGROUND_IMAGE_BYTES,
   MAX_BACKGROUND_VIDEO_BYTES,
 } from '@/utils/isRasterBackgroundFile';
-import { stripDesignHeightPx, nameStripBackgroundHex } from '@/utils/nameStripStyle';
+import { stripDesignHeightPx, nameStripBackgroundHex, NAME_STRIP_FONT_SIZE_PX } from '@/utils/nameStripStyle';
 import type { PhotoShape } from '../photoShapes';
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
@@ -64,8 +64,6 @@ interface DesignCanvasProps {
   /** Max width % for strip text (same as overlay `maxWidthPercent`). */
   textMaxWidthPercent?: number;
 }
-
-const MAX_CANVAS_HEIGHT = 640;
 
 // ── Snap & distance visual tokens (on-brand with dark theme) ──
 const SNAP_PRIMARY = 'oklch(0.768 0.1305 223.2)';
@@ -146,10 +144,18 @@ export function DesignCanvas({
 
   useEffect(() => {
     const calc = () => {
-      const hs = MAX_CANVAS_HEIGHT / posterH;
-      const cw = containerRef.current?.clientWidth ?? window.innerWidth * 0.5;
-      const ws = cw / canvasWidth;
-      setScale(Math.min(hs, ws));
+      const container = containerRef.current;
+      const availableWidth = container?.clientWidth ?? window.innerWidth * 0.5;
+      const availableHeight = container?.clientHeight ?? window.innerHeight * 0.5;
+      const posterAspectRatio = canvasWidth / posterH;
+      const isSquareishPoster = posterAspectRatio >= 0.8;
+      const tightWidthFactor = availableWidth < 900 ? 0.9 : availableWidth < 1100 ? 0.94 : 1;
+      const aspectWidthFactor = isSquareishPoster ? 0.84 : 0.92;
+      const widthScale = (availableWidth * tightWidthFactor * aspectWidthFactor) / canvasWidth;
+      const heightScale = (availableHeight * 0.96) / posterH;
+      const fittedScale = Math.min(widthScale, heightScale, 1);
+      const breathingRoomScale = isSquareishPoster ? 0.95 : 0.97;
+      setScale(fittedScale * breathingRoomScale);
     };
     calc();
     const el = containerRef.current;
@@ -440,7 +446,7 @@ export function DesignCanvas({
   };
 
   return (
-    <div ref={containerRef} className="flex flex-col items-center w-full outline-none">
+    <div ref={containerRef} className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center outline-none">
       <div
         ref={canvasRef}
         onPointerDown={handleCanvasPointerDown}
@@ -621,7 +627,7 @@ export function DesignCanvas({
                       fontFamily: textFontFamily,
                       color: textColor,
                       fontWeight,
-                      fontSize: fontSize * scale,
+                      fontSize: NAME_STRIP_FONT_SIZE_PX * scale,
                       lineHeight: 'normal',
                       textShadow: scaledCombinedShadow,
                       textAlign: textAlignment,

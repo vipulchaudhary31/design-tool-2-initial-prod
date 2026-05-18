@@ -131,20 +131,9 @@ export function buildCombinedTextShadow(shadow: TextShadow, stroke: TextStroke):
   return parts.length > 0 ? parts.join(', ') : 'none';
 }
 
-/**
- * Choose preview font family by input script:
- * - English/Latin text -> Inter
- * - Any non-Latin script (Hindi/Telugu/Tamil/etc.) -> Noto Sans
- */
-export function getNameFontFamilyForLabel(label: string): string {
-  const letterMatches = label.match(/\p{L}/gu);
-  if (!letterMatches || letterMatches.length === 0) {
-    return "'Inter', 'Noto Sans', sans-serif";
-  }
-  const hasOnlyLatinLetters = letterMatches.every((ch) => /\p{Script=Latin}/u.test(ch));
-  return hasOnlyLatinLetters
-    ? "'Inter', 'Noto Sans', sans-serif"
-    : "'Noto Sans', 'Inter', sans-serif";
+/** Use the OS/system default UI stack for editor name rendering. */
+export function getNameFontFamilyForLabel(_label: string): string {
+  return '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
 }
 
 /**

@@ -59,7 +59,12 @@ import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
 import { extensionForBackgroundContentType, normalizeBackgroundUploadContentType } from '@/utils/isRasterBackgroundFile';
-import { posterDesignHeightPx, nameStripBackgroundHex, stripDesignHeightPx } from '@/utils/nameStripStyle';
+import {
+  posterDesignHeightPx,
+  nameStripBackgroundHex,
+  stripDesignHeightPx,
+  NAME_STRIP_FONT_SIZE_PX,
+} from '@/utils/nameStripStyle';
 import {
   loadPosterStudioSession,
   savePosterStudioSession,
@@ -71,7 +76,7 @@ import { saveBackgroundMedia, loadBackgroundMedia, clearBackgroundMedia } from '
 import { defaultPostNameFromImageFilename } from '@/utils/postNameFromFile';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
-  Tags, Download, User, Circle, Square, Heart, MapPin, Flower2, Egg, Sticker, Trash2,
+  Tags, Download, User, Circle, Square, Heart, MapPin, Flower2, Sticker, Trash2,
   ChevronRight, ImageIcon, Palette,
   SlidersHorizontal, AlertCircle, LogOut, Loader2,
   CalendarClock, Play,
@@ -138,6 +143,11 @@ const DEFAULT_TEXT_STYLE: TextStyle = {
   maxWidthPercent: 80,
 };
 
+const DEFAULT_STRIP_TEXT_STYLE: TextStyle = {
+  ...DEFAULT_TEXT_STYLE,
+  fontWeight: 600,
+};
+
 const segmentedToggleGroupClass =
   'flex items-center rounded-md bg-secondary p-[3px] gap-[3px]';
 
@@ -151,11 +161,21 @@ function segmentedToggleButtonClass(isActive: boolean) {
   ].join(' ');
 }
 
-function defaultImageHolder(): ImagePlaceholder {
+function defaultImageHolder(backgroundHeight = 1350, layout: 'strip' | 'overlay' = 'strip'): ImagePlaceholder {
+  const diameter = 360;
+  const centerX = (CANVAS_WIDTH - diameter) / 2;
+  if (layout === 'strip') {
+    const gapAboveStrip = 36;
+    return {
+      x: centerX,
+      y: Math.max(0, backgroundHeight - diameter - gapAboveStrip),
+      diameter,
+    };
+  }
   return {
-    x: (CANVAS_WIDTH - 300) / 2,
+    x: centerX,
     y: 200,
-    diameter: 300,
+    diameter,
   };
 }
 
@@ -235,7 +255,7 @@ function applyPosterSnapshot(
 }
 
 /* ── Collapsible panel section ─────────────────────────────────────── */
-function PanelSection({ title, icon, children, defaultOpen = true, badge, muted = false, showSeparator = true }: {
+function PanelSection({ title, icon, children, defaultOpen = true, badge, muted = false, showSeparator = true, openTrigger }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
@@ -243,8 +263,20 @@ function PanelSection({ title, icon, children, defaultOpen = true, badge, muted 
   badge?: React.ReactNode;
   muted?: boolean;
   showSeparator?: boolean;
+  openTrigger?: unknown;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const prevOpenTrigger = useRef(openTrigger);
+
+  useEffect(() => {
+    if (openTrigger && openTrigger !== prevOpenTrigger.current) {
+      setOpen(true);
+    } else if (!openTrigger && prevOpenTrigger.current) {
+      setOpen(defaultOpen);
+    }
+    prevOpenTrigger.current = openTrigger;
+  }, [defaultOpen, openTrigger]);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
@@ -300,12 +332,28 @@ function ColorPicker({ value, onChange, onBlur, fallback = '#FFFFFF' }: {
 }
 
 function photoShapeIcon(shape: PhotoShape) {
+  const shapeSvgIcon = (path: string) => (
+    <svg
+      className="size-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={path} fill="none" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+
   if (shape === 'circle') return <Circle className="w-3 h-3" />;
   if (shape === 'square') return <Square className="w-3 h-3" />;
   if (shape === 'heart') return <Heart className="w-3 h-3" />;
+  if (shape === 'oval') return shapeSvgIcon('M12 4.5C16.2 4.5 19 7.6 19 12s-2.8 7.5-7 7.5S5 16.4 5 12s2.8-7.5 7-7.5Z');
   if (shape === 'flower') return <Flower2 className="w-3 h-3" />;
   if (shape === 'pin') return <MapPin className="w-3 h-3" />;
-  if (shape === 'dome') return <Egg className="w-3 h-3" />;
+  if (shape === 'dome') return shapeSvgIcon('M6 19V11.5C6 7.4 8.7 4.5 12 4.5s6 2.9 6 7V19Z');
   return <Circle className="w-3 h-3 scale-x-125" />;
 }
 
@@ -560,7 +608,7 @@ export default function App() {
     }
   }, []);
 
-  const [textStyle, setTextStyle] = useState<TextStyle>({ ...DEFAULT_TEXT_STYLE });
+  const [textStyle, setTextStyle] = useState<TextStyle>({ ...DEFAULT_STRIP_TEXT_STYLE });
 
   const canvasHeight = imageDimensions
     ? Math.round((CANVAS_WIDTH / imageDimensions.width) * imageDimensions.height)
@@ -590,9 +638,15 @@ export default function App() {
         lastCustomNameHolderRef.current = { ...nameHolder };
       }
       // New backgrounds should open in strip mode with the standard strip styling.
-      setTextStyle({ ...DEFAULT_TEXT_STYLE });
+      setTextStyle({ ...DEFAULT_STRIP_TEXT_STYLE });
+      setImageHolder(defaultImageHolder(normalizedHeight, 'strip'));
       setNameHolder(defaultNameHolder());
       setNameLayout('strip');
+      setPhotoShape('circle');
+      setPhotoCornerRadius(16);
+      setPhotoHasBackground(false);
+      setStickerImage(null);
+      setStickerHolder(defaultStickerHolder());
       setBackgroundImage(imageUrl);
       setBackgroundMediaType(isVideo ? 'video' : 'image');
       if (fileMeta?.name?.trim()) {
@@ -780,7 +834,7 @@ export default function App() {
         };
         lastCustomNameHolderRef.current = { ...nameHolder };
       }
-      setTextStyle({ ...DEFAULT_TEXT_STYLE });
+      setTextStyle({ ...DEFAULT_STRIP_TEXT_STYLE });
       setNameHolder(defaultNameHolder());
       setNameLayout('strip');
       return;
@@ -837,7 +891,7 @@ export default function App() {
     setPhotoBlurBorders(false);
     setIsDarkMode(true);
     setDominantColorHex(null);
-    setTextStyle({ ...DEFAULT_TEXT_STYLE });
+    setTextStyle({ ...DEFAULT_STRIP_TEXT_STYLE });
     setImageHolder(defaultImageHolder());
     setNameHolder(defaultNameHolder());
     setIsExporting(false);
@@ -1164,7 +1218,7 @@ export default function App() {
           st: {
             ts: {
               c: safeTextColor,
-              fs: textStyle.fontSize,
+              fs: nameLayout === 'strip' ? NAME_STRIP_FONT_SIZE_PX : textStyle.fontSize,
               fw: textStyle.fontWeight,
               ls: textStyle.letterSpacing,
               sh: (safeShadow.offsetX === 0
@@ -1327,7 +1381,7 @@ export default function App() {
         const safeShadow = { ...textStyle.textShadow, color: safeShadowColor };
         const safeStroke = { ...textStyle.textStroke, color: safeStrokeColor };
 
-        ctx.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${nameFontFamily}`;
+        ctx.font = `${textStyle.fontWeight} ${NAME_STRIP_FONT_SIZE_PX}px ${nameFontFamily}`;
         const ctxLs = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
         if ('letterSpacing' in ctxLs) {
           ctxLs.letterSpacing = `${textStyle.letterSpacing}px`;
@@ -1758,7 +1812,7 @@ export default function App() {
         </aside>
 
         {/* ── Center Canvas ── */}
-        <main className="flex-1 flex items-center justify-center bg-background overflow-hidden p-6">
+        <main className="flex min-w-0 min-h-0 flex-1 items-center justify-center overflow-hidden bg-background p-6">
           <DesignCanvas
             backgroundImage={backgroundImage}
             imageHolder={imageHolder}
@@ -1855,7 +1909,16 @@ export default function App() {
                     {/* Shape */}
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Shape</Label>
-                      <Select value={photoShape} onValueChange={(value) => setPhotoShape(value as PhotoShape)}>
+                      <Select
+                        value={photoShape}
+                        onValueChange={(value) => {
+                          const nextShape = value as PhotoShape;
+                          setPhotoShape(nextShape);
+                          if (nextShape === 'square') {
+                            setPhotoCornerRadius(12);
+                          }
+                        }}
+                      >
                         <SelectTrigger size="sm" className="h-9 text-xs">
                           <SelectValue placeholder="Select shape" />
                         </SelectTrigger>
@@ -1946,7 +2009,7 @@ export default function App() {
                   </div>
                 </PanelSection>
 
-                <PanelSection title="Sticker" icon={<Sticker className="w-3.5 h-3.5" />} defaultOpen={false}>
+                <PanelSection title="Sticker" icon={<Sticker className="w-3.5 h-3.5" />} defaultOpen={false} openTrigger={stickerImage}>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <label className="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border border-border bg-secondary/40 px-3 text-xs text-foreground transition-colors hover:bg-secondary">
