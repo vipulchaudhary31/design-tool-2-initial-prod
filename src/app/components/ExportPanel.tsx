@@ -13,10 +13,7 @@ interface ExportPanelProps {
   canvasHeight: number;
   nameLayout?: 'strip' | 'overlay';
   onExport: () => void;
-  onDownloadPost: () => void;
   isExporting?: boolean;
-  isDownloadingPost?: boolean;
-  downloadProgress?: number;
   postName?: string;
   postLiveImmediately?: boolean;
   postScheduleDateKey?: string;
@@ -33,10 +30,7 @@ export function ExportPanel({
   canvasHeight,
   nameLayout = 'strip',
   onExport,
-  onDownloadPost,
   isExporting = false,
-  isDownloadingPost = false,
-  downloadProgress = 0,
   postName = '',
   postLiveImmediately = false,
   postScheduleDateKey = '',
@@ -92,26 +86,6 @@ export function ExportPanel({
           <Download className="w-3.5 h-3.5" />
         )}
         {isExporting ? 'Exporting…' : allValid ? 'Export' : 'Complete all checks'}
-      </Button>
-      <Button
-        type="button"
-        variant="link"
-        size="sm"
-        className="w-full justify-start px-0 text-xs text-muted-foreground hover:text-foreground"
-        onClick={onDownloadPost}
-        disabled={!backgroundImage || isDownloadingPost}
-      >
-        {isDownloadingPost ? (
-          <>
-            <Loader2 className="mr-1 w-3.5 h-3.5 animate-spin" />
-            Downloading {Math.max(0, Math.min(100, Math.round(downloadProgress)))}%
-          </>
-        ) : (
-          <>
-            <Download className="mr-1 w-3.5 h-3.5" />
-            Download Post
-          </>
-        )}
       </Button>
 
     </div>

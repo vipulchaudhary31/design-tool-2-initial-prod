@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { DraggablePlaceholder } from './DraggablePlaceholder';
+import { StickerPlaceholder } from './StickerPlaceholder';
 import type { PhotoAnimationPreset } from './DraggablePlaceholder';
 import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
@@ -10,18 +11,22 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRasterBackgroundFile, isVideoBackgroundFile } from '@/utils/isRasterBackgroundFile';
 import { stripDesignHeightPx, nameStripBackgroundHex } from '@/utils/nameStripStyle';
+import type { PhotoShape } from '../photoShapes';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
 interface ImagePlaceholder { x: number; y: number; diameter: number; }
+interface StickerHolder { x: number; y: number; width: number; height: number; }
 
 interface DesignCanvasProps {
   backgroundImage: string | null;
   imageHolder: ImagePlaceholder;
   nameHolder: NamePlaceholder;
+  stickerHolder?: StickerHolder;
   onImageHolderChange: (pos: ImagePlaceholder) => void;
   onNameHolderChange: (pos: NamePlaceholder) => void;
+  onStickerHolderChange?: (pos: StickerHolder) => void;
   canvasWidth: number;
   canvasHeight: number;
   aspectRatio: string;
@@ -32,6 +37,7 @@ interface DesignCanvasProps {
   textShadow?: TextShadow;
   textStroke?: TextStroke;
   userPhoto?: string | null;
+  stickerImage?: string | null;
   samplePhoto?: string;
   /** When false, preview attempts to show subject cutout (transparent background). */
   photoHasBackground?: boolean;
@@ -39,7 +45,7 @@ interface DesignCanvasProps {
   textAlignment?: TextAlignment;
   letterSpacing?: number;
   textFontFamily?: string;
-  photoShape?: 'circle' | 'square';
+  photoShape?: PhotoShape;
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
@@ -72,8 +78,10 @@ export function DesignCanvas({
   backgroundImage,
   imageHolder,
   nameHolder,
+  stickerHolder,
   onImageHolderChange,
   onNameHolderChange,
+  onStickerHolderChange,
   canvasWidth,
   canvasHeight,
   userName = 'User Name',
@@ -83,6 +91,7 @@ export function DesignCanvas({
   textShadow = { offsetX: 0, offsetY: 0, blur: 0, color: '#000000', opacity: 0 },
   textStroke = { width: 0, color: '#000000' },
   userPhoto = null,
+  stickerImage = null,
   samplePhoto,
   photoHasBackground = true,
   mediaType = 'image',
@@ -107,7 +116,7 @@ export function DesignCanvas({
 }: DesignCanvasProps) {
   const posterH = posterCanvasHeight ?? canvasHeight;
   const [scale, setScale] = useState(1);
-  const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | null>(null);
+  const [selectedLayer, setSelectedLayer] = useState<'image' | 'text' | 'sticker' | null>(null);
   const [videoMuted, setVideoMuted] = useState(true);
   const [videoPlayCount, setVideoPlayCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -540,6 +549,18 @@ export function DesignCanvas({
                   : undefined
               }
             />
+            {stickerImage && stickerHolder && onStickerHolderChange && (
+              <StickerPlaceholder
+                stickerImage={stickerImage}
+                holder={stickerHolder}
+                canvasScale={scale}
+                canvasWidth={canvasWidth}
+                canvasHeight={canvasHeight}
+                isSelected={selectedLayer === 'sticker'}
+                onSelect={() => setSelectedLayer('sticker')}
+                onChange={onStickerHolderChange}
+              />
+            )}
             {nameLayout === 'overlay' && (
               <DraggablePlaceholder
                 type="rectangle"

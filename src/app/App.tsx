@@ -12,6 +12,7 @@ import {
   useLayoutEffect,
   type Dispatch,
   type SetStateAction,
+  type ChangeEvent,
 } from 'react';
 import { ImageUploader } from '@/app/components/ImageUploader';
 import { ThemeToggle } from '@/app/components/ThemeToggle';
@@ -43,6 +44,7 @@ import { Button } from '@/app/components/ui/button';
 import { Separator } from '@/app/components/ui/separator';
 import { Slider } from '@/app/components/ui/slider';
 import { Switch } from '@/app/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/app/components/ui/collapsible';
@@ -69,12 +71,13 @@ import { saveBackgroundMedia, loadBackgroundMedia, clearBackgroundMedia } from '
 import { defaultPostNameFromImageFilename } from '@/utils/postNameFromFile';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
-  Tags, Download, User, Circle, Square,
+  Tags, Download, User, Circle, Square, Heart, MapPin, Flower2, Egg, Sticker, Trash2,
   ChevronRight, ImageIcon, Palette,
   SlidersHorizontal, AlertCircle, LogOut, Loader2,
   CalendarClock, Play,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { PHOTO_SHAPE_OPTIONS, getPhotoShapePath, photoShapeNeedsCornerRadius, type PhotoShape } from './photoShapes';
 
 interface ImagePlaceholder {
   x: number;
@@ -83,6 +86,13 @@ interface ImagePlaceholder {
 }
 
 interface NamePlaceholder {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface StickerHolder {
   x: number;
   y: number;
   width: number;
@@ -165,6 +175,15 @@ function defaultNameHolder(): NamePlaceholder {
   };
 }
 
+function defaultStickerHolder(width = 240, height = 240): StickerHolder {
+  return {
+    x: (CANVAS_WIDTH - width) / 2,
+    y: 260,
+    width,
+    height,
+  };
+}
+
 function applyPosterSnapshot(
   snap: PosterStudioSessionPayload,
   apply: {
@@ -176,7 +195,7 @@ function applyPosterSnapshot(
     setSelectedLanguages: (v: string[]) => void;
     setUserName: (v: string) => void;
     setUserPhoto: (v: string | null) => void;
-    setPhotoShape: (v: 'circle' | 'square') => void;
+    setPhotoShape: (v: PhotoShape) => void;
     setPhotoCornerRadius: (v: number) => void;
     setPhotoHasBackground: (v: boolean) => void;
     setPhotoStrokeWidth: (v: number) => void;
@@ -186,6 +205,8 @@ function applyPosterSnapshot(
     setTextStyle: Dispatch<SetStateAction<TextStyle>>;
     setImageHolder: Dispatch<SetStateAction<ImagePlaceholder>>;
     setNameHolder: Dispatch<SetStateAction<NamePlaceholder>>;
+    setStickerImage: (v: string | null) => void;
+    setStickerHolder: Dispatch<SetStateAction<StickerHolder>>;
     setPostName: (v: string) => void;
     setPostLiveImmediately: (v: boolean) => void;
     setPostScheduleDateKey: (v: string) => void;
@@ -211,6 +232,8 @@ function applyPosterSnapshot(
   apply.setTextStyle(snap.textStyle);
   apply.setImageHolder(snap.imageHolder);
   apply.setNameHolder(snap.nameHolder);
+  apply.setStickerImage(snap.stickerImage ?? null);
+  apply.setStickerHolder(snap.stickerHolder ?? defaultStickerHolder());
   apply.setPostName(snap.postName);
   apply.setPostLiveImmediately(snap.postLiveImmediately);
   apply.setPostScheduleDateKey(snap.postScheduleDateKey);
@@ -283,17 +306,33 @@ function ColorPicker({ value, onChange, onBlur, fallback = '#FFFFFF' }: {
   );
 }
 
+function photoShapeIcon(shape: PhotoShape) {
+  if (shape === 'circle') return <Circle className="w-3 h-3" />;
+  if (shape === 'square') return <Square className="w-3 h-3" />;
+  if (shape === 'heart') return <Heart className="w-3 h-3" />;
+  if (shape === 'flower') return <Flower2 className="w-3 h-3" />;
+  if (shape === 'pin') return <MapPin className="w-3 h-3" />;
+  if (shape === 'dome') return <Egg className="w-3 h-3" />;
+  return <Circle className="w-3 h-3 scale-x-125" />;
+}
+
 function tracePhotoShapePath(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   size: number,
-  shape: 'circle' | 'square',
+  shape: PhotoShape,
   cornerRadius: number,
 ) {
   ctx.beginPath();
   if (shape === 'circle') {
     ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    return;
+  }
+
+  if (shape !== 'square') {
+    const path = new Path2D(getPhotoShapePath(shape, (cornerRadius / Math.max(size, 1)) * 100));
+    ctx.addPath(path, new DOMMatrix().translate(x, y).scale(size / 100, size / 100));
     return;
   }
 
@@ -312,7 +351,7 @@ function drawPhotoWithOptionalFeather(
   x: number,
   y: number,
   size: number,
-  shape: 'circle' | 'square',
+  shape: PhotoShape,
   cornerRadius: number,
   blurBorders: boolean,
 ) {
@@ -356,7 +395,7 @@ function drawPhotoWithOptionalFeather(
     sharpGradient.addColorStop(1, 'rgba(0,0,0,0)');
     sharpCtx.fillStyle = sharpGradient;
     sharpCtx.fillRect(0, 0, maskSize, maskSize);
-  } else {
+  } else if (shape === 'square') {
     const feather = Math.max(12, Math.min(maskSize * 0.12, 34));
     const horizontal = sharpCtx.createLinearGradient(0, 0, maskSize, 0);
     horizontal.addColorStop(0, 'rgba(0,0,0,0)');
@@ -382,6 +421,22 @@ function drawPhotoWithOptionalFeather(
     vertical.addColorStop(1, 'rgba(0,0,0,0)');
     sharpCtx.fillStyle = vertical;
     sharpCtx.fillRect(0, 0, maskSize, maskSize);
+  } else {
+    const maskLayer = document.createElement('canvas');
+    maskLayer.width = maskSize;
+    maskLayer.height = maskSize;
+    const maskCtx = maskLayer.getContext('2d');
+    if (maskCtx) {
+      maskCtx.save();
+      maskCtx.filter = 'blur(2.2px)';
+      tracePhotoShapePath(maskCtx, 0, 0, maskSize, shape, cornerRadius);
+      maskCtx.fillStyle = '#fff';
+      maskCtx.fill();
+      maskCtx.restore();
+
+      sharpCtx.globalCompositeOperation = 'destination-in';
+      sharpCtx.drawImage(maskLayer, 0, 0);
+    }
   }
 
   ctx.drawImage(sharpLayer, x, y, size, size);
@@ -452,7 +507,9 @@ export default function App() {
   const [postScheduleTimeHm, setPostScheduleTimeHm] = useState('09:00');
   const [userName, setUserName] = useState<string>('Srinivasalu Reddy');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
-  const [photoShape, setPhotoShape] = useState<'circle' | 'square'>('circle');
+  const [stickerImage, setStickerImage] = useState<string | null>(null);
+  const [stickerHolder, setStickerHolder] = useState<StickerHolder>(() => defaultStickerHolder());
+  const [photoShape, setPhotoShape] = useState<PhotoShape>('circle');
   const [photoCornerRadius, setPhotoCornerRadius] = useState<number>(16);
   const [photoHasBackground, setPhotoHasBackground] = useState<boolean>(false);
   const [photoStrokeWidth, setPhotoStrokeWidth] = useState<number>(0);
@@ -575,6 +632,42 @@ export default function App() {
       img.onload = () => applyBackground(img.naturalWidth, img.naturalHeight);
       img.src = imageUrl;
     }
+  };
+
+  const handleStickerUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type !== 'image/png' && !file.name.toLowerCase().endsWith('.png')) {
+      toast.error('Sticker must be a PNG', {
+        description: 'Upload a transparent PNG sticker.',
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
+      if (!dataUrl) {
+        toast.error('Could not read sticker.');
+        return;
+      }
+      const img = new window.Image();
+      img.onload = () => {
+        const maxSize = 260;
+        const ratio = img.naturalWidth > 0 && img.naturalHeight > 0
+          ? img.naturalWidth / img.naturalHeight
+          : 1;
+        const width = ratio >= 1 ? maxSize : Math.round(maxSize * ratio);
+        const height = ratio >= 1 ? Math.round(maxSize / ratio) : maxSize;
+        setStickerImage(dataUrl);
+        setStickerHolder(defaultStickerHolder(width, height));
+        toast.success('Sticker added', { description: 'Drag or resize it on the canvas.' });
+      };
+      img.onerror = () => toast.error('Could not load sticker.');
+      img.src = dataUrl;
+    };
+    reader.onerror = () => toast.error('Could not read sticker.');
+    reader.readAsDataURL(file);
   };
 
   const availableTags = isProfileTemplate ? profileTags : uploadTags;
@@ -755,6 +848,8 @@ export default function App() {
     setPostScheduleTimeHm('09:00');
     setUserName('Srinivasalu Reddy');
     setUserPhoto(null);
+    setStickerImage(null);
+    setStickerHolder(defaultStickerHolder());
     setPhotoShape('circle');
     setPhotoCornerRadius(16);
     setPhotoHasBackground(false);
@@ -802,6 +897,8 @@ export default function App() {
       setTextStyle,
       setImageHolder,
       setNameHolder,
+      setStickerImage,
+      setStickerHolder,
       setPostName,
       setPostLiveImmediately,
       setPostScheduleDateKey,
@@ -912,6 +1009,8 @@ export default function App() {
         selectedLanguages,
         userName,
         userPhoto,
+        stickerImage,
+        stickerHolder,
         photoShape,
         photoCornerRadius,
         photoHasBackground,
@@ -947,6 +1046,8 @@ export default function App() {
     selectedLanguages,
     userName,
     userPhoto,
+    stickerImage,
+    stickerHolder,
     photoShape,
     photoCornerRadius,
     photoHasBackground,
@@ -1070,7 +1171,7 @@ export default function App() {
           y: Math.round((imageHolder.y / canvasHeight) * 100),
           d: Math.round((imageHolder.diameter / CANVAS_WIDTH) * 100),
           sh: photoShape,
-          ...(photoShape === 'square' ? { cr: photoCornerRadius } : {}),
+          ...(photoShapeNeedsCornerRadius(photoShape) ? { cr: photoCornerRadius } : {}),
           hb: photoHasBackground,
           sw: photoStrokeWidth,
           sc: safePhotoStrokeColor,
@@ -1148,6 +1249,7 @@ export default function App() {
       // Photo placeholder image (uploaded user photo or preview sample)
       const previewPhoto = userPhoto || (photoHasBackground ? samplePhotoBg : samplePhotoNoBg);
       const pimg = previewPhoto ? await loadImage(previewPhoto) : null;
+      const stickerImg = stickerImage ? await loadImage(stickerImage) : null;
 
       const cubicBezierEase = (t: number, x1: number, y1: number, x2: number, y2: number) => {
         if (t <= 0) return 0;
@@ -1199,27 +1301,37 @@ export default function App() {
 
       const drawForegroundLayers = (timeSec: number) => {
         if (pimg) {
-        const d = imageHolder.diameter;
-        const { px, py } = getAnimatedPhotoPosition(timeSec);
-        const radius = photoShape === 'circle' ? d / 2 : photoCornerRadius;
-        drawPhotoWithOptionalFeather(ctx, pimg, px, py, d, photoShape, radius, photoBlurBorders);
+          const d = imageHolder.diameter;
+          const { px, py } = getAnimatedPhotoPosition(timeSec);
+          const radius = photoShape === 'square' ? photoCornerRadius : 0;
+          drawPhotoWithOptionalFeather(ctx, pimg, px, py, d, photoShape, radius, photoBlurBorders);
 
-        if (photoStrokeWidth > 0) {
-          ctx.save();
-          ctx.strokeStyle = normalizeHex(photoStrokeColor, '#FFFFFF');
-          ctx.lineWidth = photoStrokeWidth;
-          tracePhotoShapePath(
-            ctx,
-            px + photoStrokeWidth / 2,
-            py + photoStrokeWidth / 2,
-            d - photoStrokeWidth,
-            photoShape,
-            radius,
-          );
-          ctx.stroke();
-          ctx.restore();
+          if (photoShape === 'square' && photoStrokeWidth > 0) {
+            ctx.save();
+            ctx.strokeStyle = normalizeHex(photoStrokeColor, '#FFFFFF');
+            ctx.lineWidth = photoStrokeWidth;
+            tracePhotoShapePath(
+              ctx,
+              px + photoStrokeWidth / 2,
+              py + photoStrokeWidth / 2,
+              d - photoStrokeWidth,
+              photoShape,
+              radius,
+            );
+            ctx.stroke();
+            ctx.restore();
+          }
         }
-      }
+
+        if (stickerImg) {
+          ctx.drawImage(
+            stickerImg,
+            stickerHolder.x,
+            stickerHolder.y,
+            stickerHolder.width,
+            stickerHolder.height,
+          );
+        }
 
       if (nameLayout === 'strip') {
         // Name strip sits *below* the background region (attached, not overlapping).
@@ -1436,6 +1548,8 @@ export default function App() {
     canvasHeight,
     imageHolder,
     userPhoto,
+    stickerImage,
+    stickerHolder,
     photoHasBackground,
     photoShape,
     photoCornerRadius,
@@ -1475,11 +1589,6 @@ export default function App() {
         <div />
 
         <div className="flex items-center gap-3">
-          {imageDimensions && (
-            <span className="text-xs font-mono text-muted-foreground">
-              {imageDimensions.width} x {imageDimensions.height} ({aspectRatioString})
-            </span>
-          )}
           <ThemeToggle isDarkMode={isDarkMode} onToggle={setIsDarkMode} />
           <Button
             variant="ghost"
@@ -1664,10 +1773,7 @@ export default function App() {
                       canvasHeight={canvasHeight}
                       nameLayout={nameLayout}
                       onExport={handleExport}
-                      onDownloadPost={handleDownloadRenderedImage}
                       isExporting={isExporting}
-                      isDownloadingPost={isDownloadingPost}
-                      downloadProgress={downloadProgress}
                       postName={postName}
                       postLiveImmediately={postLiveImmediately}
                       postScheduleDateKey={postScheduleDateKey}
@@ -1700,6 +1806,8 @@ export default function App() {
             textShadow={textStyle.textShadow}
             textStroke={textStyle.textStroke}
             userPhoto={userPhoto}
+            stickerImage={stickerImage}
+            stickerHolder={stickerHolder}
             samplePhoto={photoHasBackground ? samplePhotoBg : samplePhotoNoBg}
             photoHasBackground={photoHasBackground}
             mediaType={backgroundMediaType}
@@ -1712,6 +1820,7 @@ export default function App() {
             photoStrokeColor={photoStrokeColor}
             photoBlurBorders={photoBlurBorders}
             onImageUpload={handleImageUpload}
+            onStickerHolderChange={setStickerHolder}
             allowedCanvasSizes={ALLOWED_CANVAS_SIZES}
             photoAnimationPreset={photoAnimationPreset}
             photoAnimationDuration={photoAnimationDuration}
@@ -1747,7 +1856,7 @@ export default function App() {
                       />
                     </div>
 
-                    {photoHasBackground && (
+                    {photoHasBackground && photoShape === 'square' && (
                       <>
                         {/* Stroke */}
                         <div>
@@ -1776,27 +1885,24 @@ export default function App() {
                     )}
 
                     {/* Shape */}
-                    <div className="flex items-center justify-between">
+                    <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Shape</Label>
-                      <div className={segmentedToggleGroupClass}>
-                        {([
-                          { value: 'circle', icon: <Circle className="w-3 h-3" />, label: 'Circle' },
-                          { value: 'square', icon: <Square className="w-3 h-3" />, label: 'Square' },
-                        ] as const).map(({ value, icon, label }) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => setPhotoShape(value)}
-                            className={segmentedToggleButtonClass(photoShape === value)}
-                          >
-                            {icon}{label}
-                          </button>
-                        ))}
-                      </div>
+                      <Select value={photoShape} onValueChange={(value) => setPhotoShape(value as PhotoShape)}>
+                        <SelectTrigger size="sm" className="h-9 text-xs">
+                          <SelectValue placeholder="Select shape" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PHOTO_SHAPE_OPTIONS.map(({ value, label }) => (
+                            <SelectItem key={value} value={value}>
+                              {photoShapeIcon(value)}{label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {/* Corner radius */}
-                    {photoShape === 'square' && (
+                    {photoShapeNeedsCornerRadius(photoShape) && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <Label className="text-xs text-muted-foreground">Corner Radius</Label>
@@ -1869,6 +1975,40 @@ export default function App() {
                       </>
                     )}
 
+                  </div>
+                </PanelSection>
+
+                <PanelSection title="Sticker" icon={<Sticker className="w-3.5 h-3.5" />} defaultOpen={false}>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label className="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border border-border bg-secondary/40 px-3 text-xs text-foreground transition-colors hover:bg-secondary">
+                        <input
+                          type="file"
+                          accept="image/png,.png"
+                          className="hidden"
+                          onChange={handleStickerUpload}
+                        />
+                        {stickerImage ? 'Replace PNG Sticker' : 'Upload PNG Sticker'}
+                      </label>
+                      {stickerImage && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                          aria-label="Remove sticker"
+                          onClick={() => {
+                            setStickerImage(null);
+                            setStickerHolder(defaultStickerHolder());
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Optional transparent PNG layer.
+                    </p>
                   </div>
                 </PanelSection>
 

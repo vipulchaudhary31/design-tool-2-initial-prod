@@ -4,6 +4,7 @@
  */
 
 import type { TextStyle } from '@/app/components/TextStyleEditor';
+import { normalizePhotoShape, type PhotoShape } from '@/app/photoShapes';
 import { defaultScheduleDateKey } from '@/utils/postSchedule';
 
 const STORAGE_KEY = 'poster-studio-session-v1';
@@ -22,6 +23,13 @@ export interface NamePlaceholderPersisted {
   height: number;
 }
 
+export interface StickerHolderPersisted {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PosterStudioSessionPayload {
   v: typeof SCHEMA_VERSION;
   backgroundImage: string | null;
@@ -32,7 +40,9 @@ export interface PosterStudioSessionPayload {
   selectedLanguages: string[];
   userName: string;
   userPhoto: string | null;
-  photoShape: 'circle' | 'square';
+  stickerImage: string | null;
+  stickerHolder: StickerHolderPersisted;
+  photoShape: PhotoShape;
   photoCornerRadius: number;
   photoHasBackground: boolean;
   photoStrokeWidth: number;
@@ -81,6 +91,7 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
 
     const ih = data.imageHolder;
     const nh = data.nameHolder;
+    const sticker = data.stickerHolder;
     if (
       !isRecord(ih) ||
       typeof ih.x !== 'number' ||
@@ -94,7 +105,20 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
     )
       return null;
 
-    const ph = data.photoShape === 'square' ? 'square' : 'circle';
+    const ph = normalizePhotoShape(data.photoShape);
+    const stickerHolder =
+      isRecord(sticker) &&
+      typeof sticker.x === 'number' &&
+      typeof sticker.y === 'number' &&
+      typeof sticker.width === 'number' &&
+      typeof sticker.height === 'number'
+        ? {
+            x: sticker.x as number,
+            y: sticker.y as number,
+            width: sticker.width as number,
+            height: sticker.height as number,
+          }
+        : { x: 420, y: 260, width: 240, height: 240 };
 
     const tsShadow = textStyle.textShadow;
     const tsStroke = textStyle.textStroke;
@@ -161,6 +185,8 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
       selectedLanguages: data.selectedLanguages as string[],
       userName: str('userName') ?? '',
       userPhoto: strOrNull('userPhoto'),
+      stickerImage: strOrNull('stickerImage'),
+      stickerHolder,
       photoShape: ph,
       photoCornerRadius: typeof data.photoCornerRadius === 'number' ? data.photoCornerRadius : 16,
       photoHasBackground: typeof data.photoHasBackground === 'boolean' ? data.photoHasBackground : false,

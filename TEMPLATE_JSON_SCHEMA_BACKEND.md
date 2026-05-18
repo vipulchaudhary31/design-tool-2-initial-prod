@@ -76,7 +76,7 @@ interface ImagePlaceholder {
   xPercent: number;          // 0–100
   yPercent: number;          // 0–100
   diameterPercent: number;   // 0–100
-  shape: 'circle' | 'square';
+  shape: 'circle' | 'square' | 'heart' | 'oval' | 'flower' | 'pin' | 'dome';
   cornerRadiusPx?: number;   // only for shape === 'square'
   hasBackground: boolean;
   strokeWidthPx: number;
@@ -90,12 +90,12 @@ interface ImagePlaceholder {
 | `xPercent`        | number (0–100)        | Left of photo frame as % of canvas width                           |
 | `yPercent`        | number (0–100)        | Top of photo frame as % of canvas height                           |
 | `diameterPercent` | number (0–100)        | Size of photo frame as % of canvas width                           |
-| `shape`           | `'circle' \| 'square'`| Frame shape                                                         |
+| `shape`           | `'circle' \| 'square' \| 'heart' \| 'oval' \| 'flower' \| 'pin' \| 'dome'` | Frame shape |
 | `cornerRadiusPx`  | number \| undefined   | Corner radius (design px) — only for `shape === "square"`          |
 | `hasBackground`   | boolean               | `true` = user photo keeps background, `false` = cutout/PNG         |
 | `strokeWidthPx`   | number                | Photo border width (design px, 0 = none)                           |
 | `strokeColor`     | string (hex)          | Photo border colour                                                |
-| `blurBorders`     | boolean               | Feather alpha at the photo frame edge (`circle` / `square`) so it blends into the background |
+| `blurBorders`     | boolean               | Feather alpha at the photo frame edge so it blends into the background |
 
 ---
 
@@ -249,11 +249,11 @@ All under `ip`:
 | `ip.x`      | `imagePlaceholder.xPercent`                 | Photo frame left position as % of canvas width (0–100)           |
 | `ip.y`      | `imagePlaceholder.yPercent`                 | Photo frame top position as % of canvas height (0–100)           |
 | `ip.d`      | `imagePlaceholder.diameterPercent`          | Photo frame diameter/size as % of canvas width (0–100)           |
-| `ip.sh`     | `imagePlaceholder.shape`                    | Photo frame shape — `"circle"` or `"square"`                     |
+| `ip.sh`     | `imagePlaceholder.shape`                    | Photo frame shape — `"circle"`, `"square"`, `"heart"`, `"oval"`, `"flower"`, `"pin"`, or `"dome"` |
 | `ip.cr`     | `imagePlaceholder.cornerRadiusPx`           | Corner radius in design px (only when `shape === "square"`)      |
 | `ip.hb`     | `imagePlaceholder.hasBackground`            | Has background — `true` = full photo, `false` = cutout PNG       |
-| `ip.sw`     | `imagePlaceholder.strokeWidthPx`            | Photo border (stroke) width in design px                         |
-| `ip.sc`     | `imagePlaceholder.strokeColor`              | Photo border (stroke) colour as hex string                       |
+| `ip.sw`     | `imagePlaceholder.strokeWidthPx`            | Photo border (stroke) width in design px; currently render only for square |
+| `ip.sc`     | `imagePlaceholder.strokeColor`              | Photo border (stroke) colour as hex string; currently render only for square |
 | `ip.bb`     | `imagePlaceholder.blurBorders`              | Feather the photo frame edge for dynamic app rendering            |
 
 #### 7.2.1 `ia` — Image animation
@@ -328,7 +328,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
 - **`nl` / `nameLayout`:** persist as-is. When `"strip"`, ignore **`np` geometry** (`x`,`y`,`w`,`h`) and render the bottom strip using **`postName`** + **`np.st.ts`** for typography (≈ **6.5%** strip height, **80%** max text width default). When `"overlay"`, render full `np` as before.
 - **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
-- **`ip.bb` / `imagePlaceholder.blurBorders`:** persist this boolean with `raw_config`. Consumer renderers should feather the placeholder frame edge (`circle` / `square`) for both image and video backgrounds using an edge-only blurred ring/strip plus a sharp masked center. Do not attempt subject-edge detection and do not store a pre-rendered blurred user image in the template, because user photos are dynamic and can be transparent cutouts.
+- **`ip.bb` / `imagePlaceholder.blurBorders`:** persist this boolean with `raw_config`. Consumer renderers should feather the selected placeholder frame edge for both image and video backgrounds using the same shape path as `ip.sh`. Do not attempt subject-edge detection and do not store a pre-rendered blurred user image in the template, because user photos are dynamic and can be transparent cutouts.
 - **`dc` / `dominantColorHex`:** sampled from **images and videos** in the editor (video: up to two frame samples, brighter result preferred). **Current export** always includes a hex string; failures normalize to **`#000000`**. Legacy payloads may store `null` — backends and clients should coerce to **`#000000`** for strip rendering. Used by **`nl === "strip"`** (strip = black mixed 50% with dominant).
 - **`ar` / `aspectRatio`:** for images, one of four known ratios. For videos, any valid GCD-reduced ratio. Always parse the two numbers dynamically — do not hardcode a list of known values.
 - All rendering-specific React Native details live in  

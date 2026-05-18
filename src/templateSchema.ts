@@ -1,3 +1,5 @@
+import type { PhotoShape } from './app/photoShapes';
+
 // Compact template JSON schema used for export.
 // This keeps the downloaded files small while this file documents
 // the meaning of each short key for your dev team.
@@ -37,8 +39,8 @@ export type CompactTemplateJSON = {
     y: number;
     /** diameter (% of canvas width, 0–100) */
     d: number;
-    /** shape: "circle" | "square" */
-    sh: 'circle' | 'square';
+    /** shape: "circle" | "square" | "heart" | "oval" | "flower" | "pin" | "dome" */
+    sh: PhotoShape;
     /** cornerRadius (only for square), in design px */
     cr?: number;
     /** hasBackground flag (used by consumer to decide cutout vs. full) */

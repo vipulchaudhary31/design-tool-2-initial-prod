@@ -4,6 +4,7 @@ import type { TextAlignment, TextShadow, TextStroke } from './TextStyleEditor';
 import { buildCombinedTextShadow } from './TextStyleEditor';
 import { computeSnap, computeResizeSnap, circleToRect, nameToRect } from './snap-engine';
 import type { Rect, SnapGuide } from './snap-engine';
+import { getPhotoShapeMaskUrl, type PhotoShape } from '../photoShapes';
 
 type Corner = 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r' | null;
 
@@ -61,7 +62,7 @@ interface DraggablePlaceholderProps {
   textAlignment?: TextAlignment;
   letterSpacing?: number;
   textFontFamily?: string;
-  photoShape?: 'circle' | 'square';
+  photoShape?: PhotoShape;
   photoCornerRadius?: number;
   photoStrokeWidth?: number;
   photoStrokeColor?: string;
@@ -531,8 +532,24 @@ export function DraggablePlaceholder({
   if (type === 'circle') {
     const scaledDisplaySize = displayDiameter * safeScale;
     const featherPx = Math.max(12, Math.min(scaledDisplaySize * 0.12, 34));
+    const cornerRadiusPercent = photoShape === 'square' ? (photoCornerRadius / Math.max(displayDiameter, 1)) * 100 : 0;
+    const svgMaskStyle = (feathered: boolean): CSSProperties => {
+      const maskUrl = getPhotoShapeMaskUrl(photoShape, cornerRadiusPercent, feathered);
+      return {
+        WebkitMaskImage: maskUrl,
+        maskImage: maskUrl,
+        WebkitMaskSize: '100% 100%',
+        maskSize: '100% 100%',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskMode: 'alpha',
+        maskMode: 'alpha',
+      };
+    };
     const sharpPhotoMaskStyle: CSSProperties | undefined = photoBlurBorders && previewPhoto
-      ? photoShape === 'circle'
+      ? photoShape !== 'circle' && photoShape !== 'square'
+        ? svgMaskStyle(true)
+        : photoShape === 'circle'
         ? {
             WebkitMaskImage: 'radial-gradient(circle closest-side at center, #000 0%, #000 82%, rgba(0,0,0,0.94) 88%, rgba(0,0,0,0.58) 94%, transparent 100%)',
             maskImage: 'radial-gradient(circle closest-side at center, #000 0%, #000 82%, rgba(0,0,0,0.94) 88%, rgba(0,0,0,0.58) 94%, transparent 100%)',
@@ -547,6 +564,11 @@ export function DraggablePlaceholder({
             WebkitMaskMode: 'alpha',
             maskMode: 'alpha',
           } as CSSProperties
+      : undefined;
+    const photoMaskStyle: CSSProperties | undefined = previewPhoto
+      ? photoBlurBorders
+        ? sharpPhotoMaskStyle
+        : svgMaskStyle(false)
       : undefined;
 
     return (
@@ -576,8 +598,8 @@ export function DraggablePlaceholder({
             <div
               className="w-full h-full flex items-center justify-center overflow-hidden"
               style={{
-                border: photoStrokeWidth > 0 ? `${photoStrokeWidth * safeScale}px solid ${photoStrokeColor}` : 'none',
-                borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
+                border: photoStrokeWidth > 0 && photoShape === 'square' ? `${photoStrokeWidth * safeScale}px solid ${photoStrokeColor}` : 'none',
+                borderRadius: photoShape === 'circle' ? '9999px' : photoShape === 'square' ? `${photoCornerRadius * safeScale}px` : 0,
                 boxSizing: 'border-box',
                 backgroundColor: previewPhoto
                   ? 'transparent'
@@ -590,7 +612,7 @@ export function DraggablePlaceholder({
                     src={previewPhoto}
                     alt="User Photo"
                     className="w-full h-full object-cover pointer-events-none"
-                    style={sharpPhotoMaskStyle}
+                    style={photoMaskStyle}
                     draggable={false}
                   />
                 ) : (
@@ -598,6 +620,7 @@ export function DraggablePlaceholder({
                     src={previewPhoto}
                     alt="User Photo"
                     className="w-full h-full object-cover pointer-events-none"
+                    style={photoMaskStyle}
                     draggable={false}
                   />
                 )
@@ -713,7 +736,7 @@ export function DraggablePlaceholder({
         <div
           className="absolute inset-0 pointer-events-none transition-all duration-150"
           style={{
-            borderRadius: photoShape === 'circle' ? '9999px' : `${photoCornerRadius * safeScale}px`,
+            borderRadius: photoShape === 'circle' ? '9999px' : photoShape === 'square' ? `${photoCornerRadius * safeScale}px` : 0,
             boxShadow: isSelected || interacting ? `0 0 0 2px ${SEL_HANDLE_RING}` : 'none',
           }}
         />

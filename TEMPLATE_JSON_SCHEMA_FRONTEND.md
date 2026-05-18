@@ -59,6 +59,7 @@ const scale = outputCanvasWidth / 1080;
 - `np.st.ts.ls` — letter spacing  
 - `np.st.ts.sh.ox`, `np.st.ts.sh.oy`, `np.st.ts.sh.bl` — shadow  
 - `ip.sw` — photo border width  
+- `ip.sh` — photo frame shape: `"circle"`, `"square"`, `"heart"`, `"oval"`, `"flower"`, `"pin"`, `"dome"`
 - `ip.cr` — corner radius (square only)
 
 **Percent of canvas (0–100) — multiply by width/height:**
@@ -123,7 +124,7 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 
 ## `ip` — Photo placeholder
 
-Same semantics as before (circle/square, `cr` only for square, `hb`, stroke).
+Same semantics as before, but `sh` now supports decorative frame shapes. `cr` and stroke are square-only.
 
 ```json
 "ip": {
@@ -155,10 +156,10 @@ Same semantics as before (circle/square, `cr` only for square, `hb`, stroke).
 | Key  | Type | Description |
 |------|------|-------------|
 | `x`, `y`, `d` | 0–100 | Position and size as **%** of canvas width/height (same as earlier docs). |
-| `sh` | `"circle"` \| `"square"` | Shape |
+| `sh` | `"circle"` \| `"square"` \| `"heart"` \| `"oval"` \| `"flower"` \| `"pin"` \| `"dome"` | Photo frame shape |
 | `cr` | design px | Corner radius — **only when** `sh === "square"` |
 | `hb` | boolean | Photo has background vs cutout |
-| `sw`, `sc` | design px / hex | Border |
+| `sw`, `sc` | design px / hex | Border — currently rendered only when `sh === "square"` |
 | `bb` | boolean | Blur borders / feather photo alpha near the edge |
 
 **Render snippet** (unchanged idea):
@@ -167,26 +168,23 @@ Same semantics as before (circle/square, `cr` only for square, `hb`, stroke).
 const photoSize   = (ip.d / 100) * canvasWidth;
 const photoLeft   = (ip.x / 100) * canvasWidth;
 const photoTop    = (ip.y / 100) * canvasHeight;
-const borderRadius = ip.sh === 'circle' ? photoSize / 2 : (ip.cr ?? 0) * scale;
-const borderWidth  = ip.sw * scale;
+const borderRadius = ip.sh === 'circle' ? photoSize / 2 : ip.sh === 'square' ? (ip.cr ?? 0) * scale : 0;
+const borderWidth  = ip.sh === 'square' ? ip.sw * scale : 0;
 const shouldBlurBorders = ip.bb === true;
 ```
 
-When `ip.bb === true`, feather the **photo frame edge** (circle or square), not the detected subject edge. User photos can be transparent cutouts, so subject-edge detection is not reliable across dynamic photos. Do **not** bake a blurred image into the template, because the actual user photo changes per render.
+When `ip.bb === true`, feather the **photo frame edge**, not the detected subject edge. User photos can be transparent cutouts, so subject-edge detection is not reliable across dynamic photos. Do **not** bake a blurred image into the template, because the actual user photo changes per render.
 
 Use this frame-edge recipe for parity with Poster Studio:
 
-1. Draw an edge-only blurred copy of the user photo, clipped to the placeholder shape.
-2. Mask that blurred copy so it is visible only near the outer frame boundary:
-   - Circle: radial ring mask, transparent in the centre, strongest around about `76%` radius, fading out by the frame edge.
-   - Square: horizontal and vertical edge-band masks around the four sides.
-3. Draw the sharp user photo on top with a progressive alpha mask:
-   - Circle: solid center until about `58%` radius, soft transition through about `90%`, transparent at the frame edge.
-   - Square: horizontal and vertical alpha gradients intersected, with feather width ≈ `photoSize * 0.30` capped around `88px`.
+1. Clip the user photo to the selected frame shape.
+2. Apply a progressive alpha feather only at the frame boundary.
+3. Keep the center fully opaque so the person’s face/clothes do not get washed out.
+4. Use the same shape path for normal clipping and feathered clipping so `"heart"`, `"oval"`, `"flower"`, `"pin"`, and `"dome"` stay visually consistent with circle/square.
 
 React Native parity:
 
-- Preferred: use `@shopify/react-native-skia` for the clipped image, edge-only blurred ring/strip, and alpha mask. This gives the closest match for both circle radial masks and square edge bands.
+- Preferred: use `@shopify/react-native-skia` for the clipped image and alpha mask. This gives the closest match for all custom shape paths.
 - Acceptable fallback: use `@react-native-masked-view/masked-view` with an SVG/Skia gradient mask for the photo frame.
 
 Web renderers can use CSS `mask-image`; Canvas renderers can draw the photo to an offscreen canvas and apply the feather mask with `globalCompositeOperation = "destination-in"`.
@@ -383,8 +381,8 @@ function PosterTemplate({ json, outputWidth, mediaBaseUrl, userName, userPhotoUr
   const photoSize   = (ip.d / 100) * canvasWidth;
   const photoLeft   = (ip.x / 100) * canvasWidth;
   const photoTop    = (ip.y / 100) * canvasHeight;
-  const borderRadius = ip.sh === 'circle' ? photoSize / 2 : (ip.cr ?? 0) * scale;
-  const borderWidth  = ip.sw * scale;
+  const borderRadius = ip.sh === 'circle' ? photoSize / 2 : ip.sh === 'square' ? (ip.cr ?? 0) * scale : 0;
+  const borderWidth  = ip.sh === 'square' ? ip.sw * scale : 0;
 
   const bandWidth  = (np.w / 100) * canvasWidth;
   const bandHeight = (np.h / 100) * canvasHeight;
