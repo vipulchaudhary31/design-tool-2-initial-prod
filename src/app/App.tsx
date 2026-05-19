@@ -579,7 +579,7 @@ export default function App() {
   const [postName, setPostName] = useState('');
   const [postLiveImmediately, setPostLiveImmediately] = useState(false);
   const [postScheduleDateKey, setPostScheduleDateKey] = useState(() => defaultScheduleDateKey());
-  const [postScheduleTimeHm, setPostScheduleTimeHm] = useState('09:00');
+  const [postScheduleTimeHm, setPostScheduleTimeHm] = useState('');
   const [userName, setUserName] = useState<string>('Srinivasalu Reddy');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [stickerImage, setStickerImage] = useState<string | null>(null);
@@ -655,6 +655,32 @@ export default function App() {
     ? computeAspectRatioString(CANVAS_WIDTH, posterCanvasHeight)
     : '';
 
+  const applyFreshDesignDefaults = useCallback((normalizedHeight: number) => {
+    setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
+    setPhotoAnimationPreset('none');
+    setPhotoAnimationDuration(2.4);
+    setPhotoAnimationReplayTick(0);
+    setNameLayout('strip');
+    setIsProfileTemplate(true);
+    setSelectedTags([]);
+    setSelectedLanguages([]);
+    setUserName('Srinivasalu Reddy');
+    setUserPhoto(null);
+    setStickerImage(null);
+    setStickerHolder(defaultStickerHolder());
+    setPhotoShape('circle');
+    setPhotoCornerRadius(16);
+    setPhotoHasBackground(false);
+    setPhotoStrokeWidth(0);
+    setPhotoStrokeColor('#FFFFFF');
+    setPhotoBlurBorders(false);
+    setDominantColorHex(null);
+    setTextStyle({ ...DEFAULT_STRIP_TEXT_STYLE });
+    setImageHolder(defaultImageHolder(normalizedHeight, 'strip'));
+    setNameHolder(defaultNameHolder());
+    setIsExporting(false);
+  }, []);
+
   const handleImageUpload = (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => {
     const isVideo = fileMeta?.mediaType === 'video';
 
@@ -662,7 +688,6 @@ export default function App() {
       const normalizedHeight = srcWidth > 0 && srcHeight > 0
         ? Math.round((CANVAS_WIDTH / srcWidth) * srcHeight)
         : 1350;
-      setImageDimensions({ width: CANVAS_WIDTH, height: normalizedHeight });
       if (nameLayout === 'overlay') {
         lastCustomTextStyleRef.current = {
           ...textStyle,
@@ -671,20 +696,13 @@ export default function App() {
         };
         lastCustomNameHolderRef.current = { ...nameHolder };
       }
-      // New backgrounds should open in strip mode with the standard strip styling.
-      setTextStyle({ ...DEFAULT_STRIP_TEXT_STYLE });
-      setImageHolder(defaultImageHolder(normalizedHeight, 'strip'));
-      setNameHolder(defaultNameHolder());
-      setNameLayout('strip');
-      setPhotoShape('circle');
-      setPhotoCornerRadius(16);
-      setPhotoHasBackground(false);
-      setStickerImage(null);
-      setStickerHolder(defaultStickerHolder());
+      applyFreshDesignDefaults(normalizedHeight);
       setBackgroundImage(imageUrl);
       setBackgroundMediaType(isVideo ? 'video' : 'image');
       if (fileMeta?.name?.trim()) {
         setPostName(defaultPostNameFromImageFilename(fileMeta.name));
+      } else {
+        setPostName('');
       }
     };
 
@@ -918,7 +936,7 @@ export default function App() {
     setPostName('');
     setPostLiveImmediately(false);
     setPostScheduleDateKey(defaultScheduleDateKey());
-    setPostScheduleTimeHm('09:00');
+    setPostScheduleTimeHm('');
     setUserName('Srinivasalu Reddy');
     setUserPhoto(null);
     setStickerImage(null);
@@ -1220,7 +1238,7 @@ export default function App() {
     let scheduledAtIso: string | null = null;
     if (!postLiveImmediately) {
       try {
-        scheduledAtIso = localYmdHmToISO(postScheduleDateKey, postScheduleTimeHm || '09:00');
+        scheduledAtIso = localYmdHmToISO(postScheduleDateKey, postScheduleTimeHm);
       } catch {
         toast.error('Invalid schedule', { description: 'Choose a valid date and time.' });
         return null;
@@ -1842,10 +1860,6 @@ export default function App() {
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
                 mediaType={backgroundMediaType}
-                onRemove={() => {
-                  void clearBackgroundMedia();
-                  resetStudioWorkspaceToBlank();
-                }}
               />
             </PanelSection>
 
@@ -2088,9 +2102,9 @@ export default function App() {
                       </>
                     )}
 
-                    {/* Shape */}
+                    {/* Photo shape */}
                     <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Shape</Label>
+                      <Label className="text-xs text-muted-foreground">Photo Shape</Label>
                       <Select
                         value={photoShape}
                         onValueChange={(value) => {
@@ -2135,7 +2149,7 @@ export default function App() {
                         <Separator />
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs text-foreground/80">Animation</Label>
+                            <Label className="text-xs text-foreground/80">Photo Animation</Label>
                             <Button
                               type="button"
                               variant="ghost"

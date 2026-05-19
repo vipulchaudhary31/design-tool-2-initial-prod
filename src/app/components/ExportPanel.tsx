@@ -44,7 +44,7 @@ export function ExportPanel({
   postName = '',
   postLiveImmediately = false,
   postScheduleDateKey = '',
-  postScheduleTimeHm = '09:00',
+  postScheduleTimeHm = '',
 }: ExportPanelProps) {
   const checks = [
     { ok: !!backgroundImage, label: 'Design uploaded' },

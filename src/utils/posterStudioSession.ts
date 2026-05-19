@@ -173,7 +173,7 @@ function parsePayload(raw: string): PosterStudioSessionPayload | null {
     const postScheduleTimeHm =
       typeof data.postScheduleTimeHm === 'string' && /^\d{2}:\d{2}$/.test(data.postScheduleTimeHm)
         ? data.postScheduleTimeHm
-        : '09:00';
+        : '';
 
     return {
       v: SCHEMA_VERSION,

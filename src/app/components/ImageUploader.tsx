@@ -1,6 +1,5 @@
 import { useRef } from 'react';
-import { Upload, ImageIcon, RefreshCw, Trash2, Film } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
+import { Upload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   isRasterBackgroundFile,
@@ -18,10 +17,9 @@ interface ImageUploaderProps {
   onImageUpload: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   hasImage: boolean;
   mediaType?: 'image' | 'video';
-  onRemove?: () => void;
 }
 
-export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image', onRemove }: ImageUploaderProps) {
+export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image' }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processChosenFile = (file: File, inputEl: HTMLInputElement) => {
@@ -62,6 +60,7 @@ export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image', on
   };
 
   const openPick = () => fileInputRef.current?.click();
+  void mediaType;
 
   return (
     <div>
@@ -88,32 +87,17 @@ export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image', on
           </div>
         </button>
       ) : (
-        <div className="flex items-center gap-2">
-          <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-xs text-foreground transition-colors hover:bg-secondary">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            {mediaType === 'video' ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-            <RefreshCw className="h-3.5 w-3.5" />
-            Replace design
-          </label>
-          {onRemove ? (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-              type="button"
-              aria-label="Remove design"
-              onClick={onRemove}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
-          ) : null}
-        </div>
+        <label className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-xs text-foreground transition-colors hover:bg-secondary">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <RefreshCw className="h-3.5 w-3.5" />
+          Change Design
+        </label>
       )}
     </div>
   );
