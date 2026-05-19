@@ -1,6 +1,8 @@
 import { AlertCircle, CheckCircle2, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { Progress } from '@/app/components/ui/progress';
 import { isPostScheduleAllowed } from '@/utils/postSchedule';
+import type { ExportFinalizationStatus } from '@/utils/exportBackgroundFinalizer';
 
 interface ExportPanelProps {
   backgroundImage: string | null;
@@ -13,7 +15,11 @@ interface ExportPanelProps {
   canvasHeight: number;
   nameLayout?: 'strip' | 'overlay';
   onExport: () => void;
+  onPreview?: () => void;
   isExporting?: boolean;
+  exportStatus?: ExportFinalizationStatus | null;
+  exportLabel?: string;
+  previewLabel?: string;
   postName?: string;
   postLiveImmediately?: boolean;
   postScheduleDateKey?: string;
@@ -30,14 +36,18 @@ export function ExportPanel({
   canvasHeight,
   nameLayout = 'strip',
   onExport,
+  onPreview,
   isExporting = false,
+  exportStatus = null,
+  exportLabel = 'Save',
+  previewLabel = 'Preview',
   postName = '',
   postLiveImmediately = false,
   postScheduleDateKey = '',
   postScheduleTimeHm = '09:00',
 }: ExportPanelProps) {
   const checks = [
-    { ok: !!backgroundImage, label: 'Background uploaded' },
+    { ok: !!backgroundImage, label: 'Design uploaded' },
     { ok: selectedTags.length > 0, label: 'Primary category selected' },
     { ok: selectedLanguages.length > 0, label: 'Language selected' },
     { ok: !!(postName ?? '').trim(), label: 'Post name entered' },
@@ -64,7 +74,7 @@ export function ExportPanel({
   const allValid = checks.every(c => c.ok);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pb-10">
       <div className="space-y-1">
         {checks.map(c => (
           <div key={c.label} className="flex items-center gap-2 py-1">
@@ -85,8 +95,36 @@ export function ExportPanel({
         ) : (
           <Download className="w-3.5 h-3.5" />
         )}
-        {isExporting ? 'Exporting…' : allValid ? 'Export' : 'Complete all checks'}
+        {isExporting ? 'Working…' : exportLabel}
       </Button>
+      {onPreview ? (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            onClick={onPreview}
+            disabled={!allValid || isExporting}
+            className="h-auto px-0 text-xs text-muted-foreground underline decoration-muted-foreground/60 underline-offset-4 hover:text-foreground"
+          >
+            {previewLabel}
+          </Button>
+        </div>
+      ) : null}
+      {exportStatus && (
+        <div className="rounded-md border border-border/60 bg-secondary/45 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-foreground/80">{exportStatus.label}</span>
+            <span className="text-[11px] text-muted-foreground">{Math.round(exportStatus.progress)}%</span>
+          </div>
+          <Progress value={exportStatus.progress} className="mt-2 h-1.5" />
+          {exportStatus.detail ? (
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              {exportStatus.detail}
+            </p>
+          ) : null}
+        </div>
+      )}
 
     </div>
   );

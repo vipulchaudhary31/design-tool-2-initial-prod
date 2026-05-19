@@ -1,5 +1,5 @@
 /**
- * Preserved AlertDialog layout for “replace background?” — not wired in the app (picker opens directly).
+ * Preserved AlertDialog layout for “replace design?” — not wired in the app (picker opens directly).
  * To use: wrap with AlertDialog.Root + `open` / `onOpenChange`; call `onConfirmPick`, then programme the file input.
  */
 
@@ -54,9 +54,9 @@ export function ReplaceBackgroundConfirmDialog({
             </Button>
           </div>
           <AlertDialogHeader className="gap-1.5 space-y-0 text-left">
-            <AlertDialogTitle className="text-left">Replace background?</AlertDialogTitle>
+            <AlertDialogTitle className="text-left">Replace design?</AlertDialogTitle>
             <AlertDialogDescription className="text-left">
-              Replacing your background will reset all your saved changes.
+              Replacing your design will reset all your saved changes.
             </AlertDialogDescription>
           </AlertDialogHeader>
         </div>

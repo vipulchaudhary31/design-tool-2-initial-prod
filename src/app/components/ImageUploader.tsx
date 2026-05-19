@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, ImageIcon, RefreshCw, Trash2, Film } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -17,9 +17,11 @@ function formatFileSize(bytes: number): string {
 interface ImageUploaderProps {
   onImageUpload: (imageUrl: string, fileMeta?: { name?: string; mediaType?: 'image' | 'video' }) => void;
   hasImage: boolean;
+  mediaType?: 'image' | 'video';
+  onRemove?: () => void;
 }
 
-export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
+export function ImageUploader({ onImageUpload, hasImage, mediaType = 'image', onRemove }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processChosenFile = (file: File, inputEl: HTMLInputElement) => {
@@ -81,29 +83,36 @@ export function ImageUploader({ onImageUpload, hasImage }: ImageUploaderProps) {
             <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
           <div className="text-center">
-            <p className="text-sm text-foreground/80">Upload Background</p>
-            <p className="text-xs text-muted-foreground mt-0.5">JPG/PNG up to 5 MB · MP4 up to 100 MB</p>
+            <p className="text-sm text-foreground/80">Upload Design</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Image max 5 MB · Video max 100 MB</p>
           </div>
         </button>
       ) : (
-        <div className="flex items-center gap-3 p-2.5 rounded-md bg-secondary/45">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-primary/[0.055] text-primary/75">
-            <ImageIcon className="h-4 w-4" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-foreground/80">Background loaded</p>
-            <p className="text-[11px] text-muted-foreground">Ready to design</p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground"
-            type="button"
-            title="Change background"
-            onClick={openPick}
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </Button>
+        <div className="flex items-center gap-2">
+          <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-xs text-foreground transition-colors hover:bg-secondary">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {mediaType === 'video' ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+            <RefreshCw className="h-3.5 w-3.5" />
+            Replace design
+          </label>
+          {onRemove ? (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+              type="button"
+              aria-label="Remove design"
+              onClick={onRemove}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

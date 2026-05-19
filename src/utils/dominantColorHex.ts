@@ -1,5 +1,7 @@
+import type { Palette } from '@vibrant/color';
+
 /**
- * Dominant colour from background media (Color Thief). On any failure or
+ * Dominant colour from background media extraction. On any failure or
  * invalid sample, consumers should use pure black.
  */
 
@@ -63,4 +65,21 @@ export function hexFromColorthiefColor(
   } catch {
     return null;
   }
+}
+
+/** Pick the highest-population swatch from a Vibrant palette. */
+export function hexFromVibrantPalette(palette: Palette | null | undefined): string | null {
+  if (!palette) return null;
+
+  const swatches = Object.values(palette).filter((swatch): swatch is NonNullable<typeof swatch> => swatch != null);
+  if (swatches.length === 0) return null;
+
+  let best = swatches[0];
+  for (let i = 1; i < swatches.length; i += 1) {
+    if (swatches[i].population > best.population) {
+      best = swatches[i];
+    }
+  }
+
+  return parseDominantHex6(best.hex);
 }

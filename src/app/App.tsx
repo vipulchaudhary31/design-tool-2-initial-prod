@@ -31,11 +31,11 @@ import {
 import { ExportPanel } from '@/app/components/ExportPanel';
 import type { PhotoAnimationPreset } from '@/app/components/DraggablePlaceholder';
 import { PostDetailsSection } from '@/app/components/PostDetailsSection';
-import { getColor } from 'colorthief';
+import { Vibrant } from 'node-vibrant/browser';
 import {
   DOMINANT_COLOR_FALLBACK_HEX,
   dominantColorHexOrBlack,
-  hexFromColorthiefColor,
+  hexFromVibrantPalette,
   pickBrighterDominantHex,
 } from '@/utils/dominantColorHex';
 import { Toaster } from '@/app/components/ui/sonner';
@@ -49,16 +49,24 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/app/components/ui/collapsible';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
 import { LsdEasterEgg, LsdCredit } from '@/app/components/LsdEasterEgg';
 import type { CompactTemplateJSON } from '@/templateSchema';
 import Login from '@/app/Login';
-import { getToken, clearToken } from '@/api/client';
+import { getToken, clearToken, NETWORK_DISABLED } from '@/api/client';
 import { getLanguages } from '@/api/languages/languages';
 import { getCategories } from '@/api/categories/categories';
 import { getPresignedUrl } from '@/api/get-presigned-url/getUploadUrl';
 import { uploadImage } from '@/api/upload-image/uploadImage';
 import { createPosterTemplate } from '@/api/create-poster-template/createPosterTemplate';
-import { extensionForBackgroundContentType, normalizeBackgroundUploadContentType } from '@/utils/isRasterBackgroundFile';
+import { extensionForBackgroundContentType } from '@/utils/isRasterBackgroundFile';
 import {
   posterDesignHeightPx,
   nameStripBackgroundHex,
@@ -74,6 +82,10 @@ import {
 import { defaultScheduleDateKey, localYmdHmToISO } from '@/utils/postSchedule';
 import { saveBackgroundMedia, loadBackgroundMedia, clearBackgroundMedia } from '@/utils/backgroundMediaStore';
 import { defaultPostNameFromImageFilename } from '@/utils/postNameFromFile';
+import {
+  finalizeBackgroundForExport,
+  type ExportFinalizationStatus,
+} from '@/utils/exportBackgroundFinalizer';
 import lokalLogo from "@/assets/c54dfe46038c59054ed3c72dcf43d44ef653d78a.png";
 import {
   Tags, Download, User, Circle, Square, Heart, MapPin, Flower2, Sticker, Trash2,
@@ -102,6 +114,12 @@ interface StickerHolder {
   y: number;
   width: number;
   height: number;
+}
+
+interface LocalProcessedPreview {
+  url: string;
+  mediaType: 'image' | 'video';
+  fileName: string;
 }
 
 const CANVAS_WIDTH = 1080;
@@ -145,7 +163,7 @@ const DEFAULT_TEXT_STYLE: TextStyle = {
 
 const DEFAULT_STRIP_TEXT_STYLE: TextStyle = {
   ...DEFAULT_TEXT_STYLE,
-  fontWeight: 600,
+  fontWeight: 700,
 };
 
 const segmentedToggleGroupClass =
@@ -162,7 +180,7 @@ function segmentedToggleButtonClass(isActive: boolean) {
 }
 
 function defaultImageHolder(backgroundHeight = 1350, layout: 'strip' | 'overlay' = 'strip'): ImagePlaceholder {
-  const diameter = 360;
+  const diameter = 300;
   const centerX = (CANVAS_WIDTH - diameter) / 2;
   if (layout === 'strip') {
     const gapAboveStrip = 36;
@@ -396,12 +414,20 @@ function drawPhotoWithOptionalFeather(
   cornerRadius: number,
   blurBorders: boolean,
 ) {
+  const sourceWidth = image.naturalWidth || image.width || size;
+  const sourceHeight = image.naturalHeight || image.height || size;
+  const containScale = Math.min(size / Math.max(sourceWidth, 1), size / Math.max(sourceHeight, 1));
+  const drawWidth = sourceWidth * containScale;
+  const drawHeight = sourceHeight * containScale;
+  const drawX = x + (size - drawWidth) / 2;
+  const drawY = y + (size - drawHeight) / 2;
+
   ctx.save();
   tracePhotoShapePath(ctx, x, y, size, shape, cornerRadius);
   ctx.clip();
 
   if (!blurBorders) {
-    ctx.drawImage(image, x, y, size, size);
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
     ctx.restore();
     return;
   }
@@ -417,7 +443,13 @@ function drawPhotoWithOptionalFeather(
     return;
   }
 
-  sharpCtx.drawImage(image, 0, 0, maskSize, maskSize);
+  const sharpScale = Math.min(maskSize / Math.max(sourceWidth, 1), maskSize / Math.max(sourceHeight, 1));
+  const sharpWidth = sourceWidth * sharpScale;
+  const sharpHeight = sourceHeight * sharpScale;
+  const sharpX = (maskSize - sharpWidth) / 2;
+  const sharpY = (maskSize - sharpHeight) / 2;
+
+  sharpCtx.drawImage(image, sharpX, sharpY, sharpWidth, sharpHeight);
 
   if (shape === 'circle') {
     sharpCtx.globalCompositeOperation = 'destination-in';
@@ -498,6 +530,8 @@ export default function App() {
   const [languagesError,   setLanguagesError]   = useState(false);
   const [categoriesError,  setCategoriesError]  = useState(false);
   const [isExporting,      setIsExporting]      = useState(false);
+  const [exportStatus, setExportStatus] = useState<ExportFinalizationStatus | null>(null);
+  const [localProcessedPreview, setLocalProcessedPreview] = useState<LocalProcessedPreview | null>(null);
   const [isDownloadingPost, setIsDownloadingPost] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [persistReady, setPersistReady]       = useState(false);
@@ -719,7 +753,15 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const colorThiefOpts = { quality: 8, ignoreWhite: false } as const;
+
+    const extractFromRenderable = async (source: CanvasImageSource) => {
+      const palette = await Vibrant
+        .from(source)
+        .maxDimension(256)
+        .quality(1)
+        .getPalette();
+      return hexFromVibrantPalette(palette);
+    };
 
     const extractFromImage = async (src: string) => {
       const img = new window.Image();
@@ -729,8 +771,7 @@ export default function App() {
         img.onerror = () => reject(new Error('Could not load image for color extraction.'));
         img.src = src;
       });
-      const color = await getColor(img, colorThiefOpts);
-      return hexFromColorthiefColor(color);
+      return extractFromRenderable(img);
     };
 
     const extractHexFromVideoFrame = async (video: HTMLVideoElement): Promise<string | null> => {
@@ -750,8 +791,7 @@ export default function App() {
         img.onerror = () => reject(new Error('Could not load video frame for color extraction.'));
         img.src = dataUrl;
       });
-      const color = await getColor(img, colorThiefOpts);
-      return hexFromColorthiefColor(color);
+      return extractFromRenderable(img);
     };
 
     // Two seek positions when possible — a single frame can be black (fade-in) or unrepresentative.
@@ -1115,20 +1155,66 @@ export default function App() {
     return () => { cancelled = true; };
   }, [textStyle.fontSize, textStyle.fontWeight, textStyle.textStroke, textStyle.textShadow, canvasHeight, nameFontFamily]);
 
-  const handleExport = async () => {
+  useEffect(() => {
+    return () => {
+      if (localProcessedPreview) {
+        URL.revokeObjectURL(localProcessedPreview.url);
+      }
+    };
+  }, [localProcessedPreview]);
+
+  const openLocalProcessedPreview = useCallback((
+    blob: Blob,
+    mediaType: 'image' | 'video',
+    contentType: string,
+  ) => {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const ext = extensionForBackgroundContentType(
+      contentType === 'video/mp4' ? 'video/mp4' : contentType === 'image/png' ? 'image/png' : 'image/jpeg',
+    );
+    const nextUrl = URL.createObjectURL(blob);
+
+    setLocalProcessedPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return {
+        url: nextUrl,
+        mediaType,
+        fileName: `processed-background-${ts}.${ext}`,
+      };
+    });
+  }, []);
+
+  const downloadLocalProcessedPreview = useCallback(() => {
+    if (!localProcessedPreview) return;
+    const link = document.createElement('a');
+    link.href = localProcessedPreview.url;
+    link.download = localProcessedPreview.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [localProcessedPreview]);
+
+  const closeLocalProcessedPreview = useCallback(() => {
+    setLocalProcessedPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }, []);
+
+  const prepareExportRequest = useCallback((): { postTitle: string; scheduledAtIso: string | null } | null => {
     if (selectedTags.length === 0) {
       toast.error('Select at least 1 primary category.', { description: 'Pick a Self/Wishes tag before exporting.' });
-      return;
+      return null;
     }
     if (selectedLanguages.length === 0) {
       toast.error('Select at least 1 language.', { description: 'Pick a language before exporting.' });
-      return;
+      return null;
     }
 
     const postTitle = postName.trim();
     if (!postTitle) {
       toast.error('Post name required', { description: 'Enter a post name under Post details (it defaults from your image).' });
-      return;
+      return null;
     }
 
     let scheduledAtIso: string | null = null;
@@ -1137,32 +1223,102 @@ export default function App() {
         scheduledAtIso = localYmdHmToISO(postScheduleDateKey, postScheduleTimeHm || '09:00');
       } catch {
         toast.error('Invalid schedule', { description: 'Choose a valid date and time.' });
-        return;
+        return null;
       }
       if (new Date(scheduledAtIso).getTime() <= Date.now()) {
         toast.error('Schedule this post later', {
           description: 'Pick a date and time that is strictly in the future.',
         });
-        return;
+        return null;
       }
     }
 
+    return { postTitle, scheduledAtIso };
+  }, [
+    selectedTags,
+    selectedLanguages,
+    postName,
+    postLiveImmediately,
+    postScheduleDateKey,
+    postScheduleTimeHm,
+  ]);
+
+  const handlePreviewExport = async () => {
+    if (!prepareExportRequest()) return;
+
+    setExportStatus({
+      progress: 2,
+      label: 'Getting ready',
+      detail: 'Preparing your design.',
+    });
     setIsExporting(true);
     try {
-      // 1. Convert background to blob
-      const bgBlob = await fetch(backgroundImage!).then(r => r.blob());
-      const uploadContentType = normalizeBackgroundUploadContentType(bgBlob, backgroundImage);
+      const finalizedBackground = await finalizeBackgroundForExport({
+        backgroundSource: backgroundImage!,
+        backgroundMediaType,
+        backgroundDesignHeightPx: canvasHeight,
+        nameLayout,
+        dominantColorHex,
+        stickerImage,
+        stickerHolder,
+        onStatus: setExportStatus,
+      });
 
-      // Guard: if we think this is a video but content-type detection resolved to an image type,
-      // the blob is likely corrupt or misidentified — abort rather than uploading with wrong type.
-      if (backgroundMediaType === 'video' && uploadContentType !== 'video/mp4') {
-        throw new Error('Could not confirm video format. Please re-upload the background and try again.');
-      }
+      const { blob: uploadBlob, contentType: uploadContentType } = finalizedBackground;
+      setExportStatus({
+        progress: 96,
+        label: 'Almost ready',
+        detail: 'Opening your preview.',
+      });
+      openLocalProcessedPreview(uploadBlob, backgroundMediaType, uploadContentType);
+      setExportStatus({
+        progress: 100,
+        label: 'Ready',
+        detail: 'Your preview is ready.',
+      });
+      toast.success('Preview ready', {
+        description: 'Take a look and download it if you want.',
+      });
+    } catch (err) {
+      toast.error('Preview failed', { description: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setIsExporting(false);
+      setExportStatus(null);
+    }
+  };
 
-      const uploadBlob =
-        bgBlob.type === uploadContentType
-          ? bgBlob
-          : new Blob([await bgBlob.arrayBuffer()], { type: uploadContentType });
+  const handleExport = async () => {
+    const prepared = prepareExportRequest();
+    if (!prepared) return;
+
+    const { postTitle, scheduledAtIso } = prepared;
+
+    setExportStatus({
+      progress: 2,
+      label: 'Getting ready',
+      detail: 'Preparing your design.',
+    });
+    setIsExporting(true);
+    try {
+      // 1. Finalize the background on-device when needed, then prepare upload metadata.
+      const finalizedBackground = await finalizeBackgroundForExport({
+        backgroundSource: backgroundImage!,
+        backgroundMediaType,
+        backgroundDesignHeightPx: canvasHeight,
+        nameLayout,
+        dominantColorHex,
+        stickerImage,
+        stickerHolder,
+        onStatus: setExportStatus,
+      });
+
+      const { blob: uploadBlob, contentType: uploadContentType } = finalizedBackground;
+
+      setExportStatus({
+        progress: finalizedBackground.didFinalizeOnDevice ? 84 : 72,
+        label: 'Almost done',
+        detail: 'Getting things ready to save.',
+      });
 
       // 2. Get presigned URL
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -1172,9 +1328,21 @@ export default function App() {
         content_type: uploadContentType,
       });
 
-      // 3. Upload image via presigned POST
+      setExportStatus({
+        progress: 90,
+        label: 'Saving',
+        detail: 'Please wait a moment.',
+      });
+
+      // 3. Upload background via presigned POST
       await uploadImage(presignedUrl, fields, uploadBlob);
       const file_url = fields.key;
+
+      setExportStatus({
+        progress: 96,
+        label: 'Finishing up',
+        detail: 'Almost there.',
+      });
 
       // 4. Build payload
       const safeTextColor = normalizeHex(textStyle.color, '#FFFFFF');
@@ -1189,7 +1357,6 @@ export default function App() {
         t: isProfileTemplate,
         pc: selectedTags,
         lg: selectedLanguages,
-        pn: postTitle,
         bg: file_url,
         dc: dominantColorHexOrBlack(dominantColorHex),
         mt: backgroundMediaType,
@@ -1245,11 +1412,17 @@ export default function App() {
 
       // 5. Create poster template (sent to backend). No local JSON download.
       await createPosterTemplate({ title: postTitle, raw_config });
-      toast.success('Template exported!', { description: 'Saved to backend.' });
+      setExportStatus({
+        progress: 100,
+        label: 'Done',
+        detail: 'Your design has been saved.',
+      });
+      toast.success('Saved', { description: 'Your design has been saved.' });
     } catch (err) {
       toast.error('Export failed', { description: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setIsExporting(false);
+      setExportStatus(null);
     }
   };
 
@@ -1663,15 +1836,20 @@ export default function App() {
         {/* ── Left Panel ── */}
         <aside className="w-[272px] shrink-0 bg-card border-r border-border flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto pb-10">
-            {/* Background section — always visible, this is the first action */}
-            <PanelSection title="Background" icon={<ImageIcon className="w-3.5 h-3.5" />}>
+            {/* Design section — always visible, this is the first action */}
+            <PanelSection title="Design" icon={<ImageIcon className="w-3.5 h-3.5" />}>
               <ImageUploader
                 onImageUpload={handleImageUpload}
                 hasImage={!!backgroundImage}
+                mediaType={backgroundMediaType}
+                onRemove={() => {
+                  void clearBackgroundMedia();
+                  resetStudioWorkspaceToBlank();
+                }}
               />
             </PanelSection>
 
-            {/* Locked section stubs — visible but inactive until a background is uploaded */}
+            {/* Locked section stubs — visible but inactive until a design is uploaded */}
             {!backgroundImage && (
               <div className="pointer-events-none select-none">
                 <PanelSection title="Categories" icon={<Tags className="w-3.5 h-3.5" />} defaultOpen={false} muted>
@@ -1797,7 +1975,11 @@ export default function App() {
                       canvasHeight={canvasHeight}
                       nameLayout={nameLayout}
                       onExport={handleExport}
+                      onPreview={NETWORK_DISABLED ? handlePreviewExport : undefined}
                       isExporting={isExporting}
+                      exportStatus={exportStatus}
+                      exportLabel="Export"
+                      previewLabel="Test locally"
                       postName={postName}
                       postLiveImmediately={postLiveImmediately}
                       postScheduleDateKey={postScheduleDateKey}
@@ -2095,7 +2277,7 @@ export default function App() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center px-8 py-12">
                 <SlidersHorizontal className="w-5 h-5 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">Upload a background to access design controls</p>
+                <p className="text-sm text-muted-foreground">Upload a design to access design controls</p>
               </div>
             )}
           </div>
@@ -2103,6 +2285,61 @@ export default function App() {
       </div>
         </>
       )}
+
+      <Dialog
+        open={!!localProcessedPreview}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeLocalProcessedPreview();
+          }
+        }}
+      >
+        <DialogContent className="w-[min(96vw,1100px)] max-w-5xl gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1100px)] max-h-[92vh] h-[min(92vh,980px)] flex flex-col">
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-4 sm:px-6">
+            <DialogTitle className="text-base">Preview</DialogTitle>
+            <DialogDescription>
+              This is how your background will look.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-hidden px-4 py-4 sm:px-6 sm:py-5">
+            {localProcessedPreview?.mediaType === 'video' ? (
+              <div className="flex h-full min-h-0 w-full items-center justify-center">
+                <div className="flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-black">
+                  <video
+                    src={localProcessedPreview.url}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="block max-h-[calc(92vh-220px)] max-w-full h-auto w-auto object-contain"
+                  />
+                </div>
+              </div>
+            ) : localProcessedPreview ? (
+              <div className="flex h-full min-h-0 w-full items-center justify-center">
+                <div className="flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary/30">
+                  <img
+                    src={localProcessedPreview.url}
+                    alt="Preview"
+                    className="block max-h-[calc(92vh-220px)] max-w-full h-auto w-auto object-contain"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter className="shrink-0 border-t border-border px-4 py-4 sm:px-6">
+            <Button variant="outline" onClick={closeLocalProcessedPreview}>
+              Close
+            </Button>
+            <Button onClick={downloadLocalProcessedPreview}>
+              Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Toaster theme={isDarkMode ? 'dark' : 'light'} richColors position="bottom-center" />
       <LsdEasterEgg open={showEasterEgg} onClose={() => setShowEasterEgg(false)} />

@@ -22,8 +22,8 @@ interface TemplateJSONFull {
   isProfileTemplate: boolean;
   primaryCategories: string[];
   languageTags: string[];
-  /** Creator-visible title / list name — required, trimmed non-empty string from Poster Studio */
-  postName: string;
+  /** Legacy raw_config field. New exports omit this because create calls already send top-level `title`. */
+  postName?: string;
   /** When true, the post becomes visible once the backend completes processing/saving. */
   publishLiveImmediately: boolean;
   /**
@@ -40,8 +40,8 @@ interface TemplateJSONFull {
   dominantColorHex: string | null;
   mediaType: 'image' | 'video';
   /**
-   * "strip": bottom strip + `postName`; ignore name band **geometry** (`x/y/w/h`);
-   * still apply **`namePlaceholder.styling.textStyle`** to strip typography, except strip mode now uses a fixed **54px** font size. Strip height is fixed at **72px**.
+   * "strip": background media already contains the appended strip background; ignore name band **geometry** (`x/y/w/h`);
+   * still apply **`namePlaceholder.styling.textStyle`** to the runtime person name in the consumer app, except strip mode now uses a fixed **48px** font size. Strip height is fixed at **72px**.
    */
   nameLayout: 'strip' | 'overlay';
   imageAnimation: ImageAnimation | null;
@@ -56,13 +56,13 @@ interface TemplateJSONFull {
 | `isProfileTemplate` | boolean                     | `true` = Self/Profile, `false` = Wishes/Upload                    |
 | `primaryCategories` | string[]                    | Tags chosen in the editor (Self/Wishes categories)                |
 | `languageTags`      | string[]                    | Language labels (e.g. `["English","Hindi"]`)                      |
-| `postName`          | string                      | Required display title; matches **`title`** on template create.   |
+| `postName`          | string                      | Legacy only. New exports omit it from `raw_config`; the create API `title` remains the authoritative template title. |
 | `publishLiveImmediately` | boolean               | **`true`** = visible as soon as the template/post is activated on the backend; **`false`** = use `scheduledAt`. |
 | `scheduledAt`       | string \| **`null`**        | ISO 8601 **UTC** for go-live time when not immediate (e.g. `"2026-05-03T06:30:00.000Z"`). **`null`** when immediate. |
-| `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. |
+| `backgroundImage`   | string \| null              | **Object storage key** after presigned upload. Ends in `.jpg`/`.png` for images or `.mp4` for video. Legacy test payloads may be `data:` or full `https:` URLs. `null` = no background. In strip mode, the uploaded media already contains the appended strip background. |
 | `dominantColorHex`  | string \| null              | Hex `#RRGGBB` sampled from the background **image or video** in the editor. **Current studio** always persists a string ( **`#000000`** on failure ). **`null`** may appear on older templates — treat like **`#000000`** when rendering the strip. |
 | `mediaType`         | `'image'` \| `'video'`      | Background media type. **`"image"`** = JPG/JPEG/PNG raster. **`"video"`** = MP4. Use this to decide how to serve/display the background on the consumer app. |
-| `nameLayout`        | `'strip'` \| `'overlay'`    | **`"strip"`** = fixed bottom strip with `postName`; ignore **`namePlaceholder` x/y/w/h**; apply **`styling.textStyle`** to strip text, but use fixed strip size rules: height **72px**, font size **54px**. **`"overlay"`** = full `namePlaceholder` layout + styling. Default `"strip"`; missing → treat as `"overlay"`. |
+| `nameLayout`        | `'strip'` \| `'overlay'`    | **`"strip"`** = fixed bottom strip whose background is already baked into `backgroundImage`; ignore **`namePlaceholder` x/y/w/h** and apply **`styling.textStyle`** to the runtime person name, with fixed strip size rules: height **72px**, font size **48px**. **`"overlay"`** = full `namePlaceholder` layout + styling. Default `"strip"`; missing → treat as `"overlay"`. |
 | `imageAnimation`    | `ImageAnimation` \| null    | Photo intro animation for video templates. `null` for image templates or when disabled. |
 | `imagePlaceholder`  | `ImagePlaceholder`          | Photo frame position/shape/border config                          |
 | `namePlaceholder`   | `NamePlaceholder`           | Name text band position + text styling                            |
@@ -282,7 +282,7 @@ All under `np.st.ts`:
 | Compact key   | Full path                                        | Meaning                                                   |
 |---------------|--------------------------------------------------|-----------------------------------------------------------|
 | `np.st.ts.c`  | `namePlaceholder.styling.textStyle.color`        | Text colour as hex (e.g. `"#FFFFFF"`)                    |
-| `np.st.ts.fs` | `namePlaceholder.styling.textStyle.fontSizePx`   | Font size in design px. In strip mode this is exported as fixed **54**. |
+| `np.st.ts.fs` | `namePlaceholder.styling.textStyle.fontSizePx`   | Font size in design px. In strip mode this is exported as fixed **48**. |
 | `np.st.ts.fw` | `namePlaceholder.styling.textStyle.fontWeight`   | Font weight as numeric value (e.g. `400`, `700`)         |
 | `np.st.ts.ls` | `namePlaceholder.styling.textStyle.letterSpacingPx` | Letter spacing in design px                          |
 | `np.st.ts.ta` | `namePlaceholder.styling.textStyle.textAlign`    | Text alignment — `"left"`, `"center"`, or `"right"`      |
@@ -326,7 +326,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **`li` / `sa` (`publishLiveImmediately` / `scheduledAt`):** when `li` is `true`, expose the template/post as soon as it is persisted; when `false`, hold visibility until **`sa`** (parse as UTC ISO instant). Prefer **`sa === null`** when `li === true`.
 - **`bg` / `backgroundImage`:** persist the key returned from upload (same string stored in `raw_config`). Clients resolve it with your CDN or asset host; do not assume a data URL in production. File extension reflects the type (`.mp4` for video).
 - **`mt` / `mediaType`:** persist this alongside `bg`. Consumer apps use it to render `<Video>` vs `<Image>`. Do not infer media type from the file extension alone.
-- **`nl` / `nameLayout`:** persist as-is. When `"strip"`, ignore **`np` geometry** (`x`,`y`,`w`,`h`) and render the bottom strip using **`postName`** + **`np.st.ts`** for typography, with fixed strip rules: height **72px**, font size **54px**, **80%** max text width default. When `"overlay"`, render full `np` as before.
+- **`nl` / `nameLayout`:** persist as-is. When `"strip"`, ignore **`np` geometry** (`x`,`y`,`w`,`h`) and render the bottom strip using **`postName`** + **`np.st.ts`** for typography, with fixed strip rules: height **72px**, font size **48px**, **80%** max text width default. When `"overlay"`, render full `np` as before.
 - **`ia` / `imageAnimation`:** optional photo intro animation for video templates. Persist as-is with `raw_config`; consumer renderers should run once from start of playback and then hold final position.
 - **`ip.bb` / `imagePlaceholder.blurBorders`:** persist this boolean with `raw_config`. Consumer renderers should feather the selected placeholder frame edge for both image and video backgrounds using the same shape path as `ip.sh`. Do not attempt subject-edge detection and do not store a pre-rendered blurred user image in the template, because user photos are dynamic and can be transparent cutouts.
 - **`dc` / `dominantColorHex`:** sampled from **images and videos** in the editor (video: up to two frame samples, brighter result preferred). **Current export** always includes a hex string; failures normalize to **`#000000`**. Legacy payloads may store `null` — backends and clients should coerce to **`#000000`** for strip rendering. Used by **`nl === "strip"`** (strip = black mixed 50% with dominant).
@@ -344,7 +344,7 @@ When `w === 0`, there is effectively **no stroke**.
 - **Video support:** `mt` can be `"video"` (MP4). `bg` key ends in `.mp4`. **`dc` / `dominantColorHex`** are populated for **video** templates the same way as images (see quick summary). Persist `mt` alongside `bg` so consumer apps can render the correct media component.
 - **Photo animation support (`ia`):** compact payload now includes optional photo intro animation for video templates (`ia.p`, `ia.d`). This applies to the photo layer (`ip`) and is intended to run once from video start, then stay at final position.
 - **Blur borders (`ip.bb`):** compact payload now includes a boolean for edge-feathering the photo frame boundary on both image and video backgrounds.
-- **Name layout (`nl`):** `"strip"` (default) = bottom strip with `postName` + **`namePlaceholder.styling`** for type; **ignore band x/y/w/h**; strip height is fixed **72px** and strip font size is fixed **54px**. `"overlay"` = full name placeholder. Missing `nl` → `"overlay"`.
+- **Name layout (`nl`):** `"strip"` (default) = bottom strip with `postName` + **`namePlaceholder.styling`** for type; **ignore band x/y/w/h**; strip height is fixed **72px** and strip font size is fixed **48px**. `"overlay"` = full name placeholder. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** extracted for video backgrounds (multi-frame sampling in studio when possible). Failures map to **`#000000`** in new exports; strip fallback uses the same semantics as the frontend doc.
 
 #### April 2026 (vs March 2026 baseline)

@@ -13,9 +13,16 @@ export type CompactTemplateJSON = {
   pc: string[];
   /** languageTags */
   lg: string[];
-  /** postName — visible title / display name (required, non-empty) */
-  pn: string;
-  /** backgroundImage storage key/url or null */
+  /**
+   * Legacy postName field kept only for backward compatibility with older payloads.
+   * New exports omit this because consumer apps inject the person's name at render time.
+   */
+  pn?: string;
+  /**
+   * backgroundImage storage key/url or null.
+   * Exported media already includes any baked studio-only background edits such as
+   * strip mode backgrounds and PNG stickers.
+   */
   bg: string | null;
   /**
    * dominantColorHex from background media (`#RRGGBB`).
@@ -54,14 +61,18 @@ export type CompactTemplateJSON = {
   };
   /**
    * Name layout mode.
-   * - "strip"   = fixed full-width strip below the background with text from `pn`.
+   * - "strip"   = fixed full-width strip below the background.
+   *              The strip background is already baked into `bg` during export.
    *              Ignore `np.x` / `np.y` / `np.w` / `np.h` for layout. Use `np.st.ts`
    *              for typography (`fw`, `c`, `ls`, `sh`, `st`, `ta`). `fs` is fixed
-   *              to 54 design px in strip mode. Strip height is fixed at 72 design px.
-   *              Strip background = black mixed 50% with `dc` (RGB = dc/2).
+   *              to 48 design px in strip mode. Strip height is fixed at 72 design px.
+   *              Consumer apps should render the person's runtime name over that strip.
    *              Max text width: **80%** of canvas (not currently a separate JSON key;
    *              matches studio default `maxWidthPercent`).
    * - "overlay" = render `np` exactly as positioned/styled in the editor (legacy).
+   *
+   * PNG stickers are also baked into `bg` during export, so no sticker geometry
+   * is sent in `raw_config`.
    *
    * Default for new templates is "strip".
    * Older payloads without this field should be treated as "overlay" for backward
@@ -142,7 +153,7 @@ export const TEMPLATE_KEY_MAP = {
   t: 'isProfileTemplate',
   pc: 'primaryCategories',
   lg: 'languageTags',
-  pn: 'postName',
+  pn: 'postName (legacy)',
   bg: 'backgroundImage',
   dc: 'dominantColorHex',
   mt: 'mediaType',

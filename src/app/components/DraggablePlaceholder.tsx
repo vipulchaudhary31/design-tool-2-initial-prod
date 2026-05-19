@@ -611,7 +611,7 @@ export function DraggablePlaceholder({
                   <img
                     src={previewPhoto}
                     alt="User Photo"
-                    className="w-full h-full object-cover pointer-events-none"
+                    className="w-full h-full object-contain pointer-events-none"
                     style={photoMaskStyle}
                     draggable={false}
                   />
@@ -619,7 +619,7 @@ export function DraggablePlaceholder({
                   <img
                     src={previewPhoto}
                     alt="User Photo"
-                    className="w-full h-full object-cover pointer-events-none"
+                    className="w-full h-full object-contain pointer-events-none"
                     style={photoMaskStyle}
                     draggable={false}
                   />

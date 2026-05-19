@@ -3,7 +3,7 @@
  * web editor preview and in the consumer render (RN app, downloaded video/image).
  *
  * Strip background = pure black mixed with `dominantColor` at 50% opacity.
- * Result RGB = dominantColor / 2 (since black contributes 0).
+ * Result RGB = dominantColor * 0.5 (since black contributes 0).
  *
  * Missing or invalid dominant colour uses pure black (`#000000`), same as export `dc`.
  */
@@ -14,7 +14,7 @@ import { dominantColorHexOrBlack } from '@/utils/dominantColorHex';
 export const NAME_STRIP_HEIGHT_PX = 72;
 
 /** Fixed design-pixel font size for strip text. */
-export const NAME_STRIP_FONT_SIZE_PX = 54;
+export const NAME_STRIP_FONT_SIZE_PX = 48;
 
 export function stripDesignHeightPx(backgroundDesignHeightPx: number): number {
   void backgroundDesignHeightPx;
@@ -43,7 +43,7 @@ function toHex(r: number, g: number, b: number) {
   return `#${h(r)}${h(g)}${h(b)}`.toUpperCase();
 }
 
-/** black + 50% dominant => result RGB = dominant / 2. */
+/** black + 50% dominant => result RGB = dominant * 0.5. */
 export function nameStripBackgroundHex(dominantColorHex: string | null | undefined): string {
   const base = dominantColorHexOrBlack(dominantColorHex);
   const rgb = parseHex(base);

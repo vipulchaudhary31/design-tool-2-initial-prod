@@ -15,7 +15,11 @@ import {
   MAX_BACKGROUND_IMAGE_BYTES,
   MAX_BACKGROUND_VIDEO_BYTES,
 } from '@/utils/isRasterBackgroundFile';
-import { stripDesignHeightPx, nameStripBackgroundHex, NAME_STRIP_FONT_SIZE_PX } from '@/utils/nameStripStyle';
+import {
+  stripDesignHeightPx,
+  nameStripBackgroundHex,
+  NAME_STRIP_FONT_SIZE_PX,
+} from '@/utils/nameStripStyle';
 import type { PhotoShape } from '../photoShapes';
 
 interface NamePlaceholder { x: number; y: number; width: number; height: number; }
@@ -459,12 +463,17 @@ export function DesignCanvas({
           border: backgroundImage ? undefined : '1px dashed var(--border)',
         }}
       >
-        {/* Background media — only occupies the poster area above the name strip */}
+        {/* Background media — slightly overlaps the strip in strip mode to avoid subpixel seams in preview */}
         <div
           className={`absolute top-0 left-0 overflow-hidden pointer-events-none ${
             nameLayout === 'strip' ? 'rounded-t-md' : 'rounded-md'
           }`}
-          style={{ width: canvasWidth * scale, height: canvasHeight * scale }}
+          style={{
+            width: canvasWidth * scale,
+            height: nameLayout === 'strip'
+              ? Math.ceil(canvasHeight * scale) + 1
+              : canvasHeight * scale,
+          }}
         >
           {backgroundImage && mediaType === 'video' && (
             <video
@@ -479,7 +488,7 @@ export function DesignCanvas({
             />
           )}
           {backgroundImage && mediaType === 'image' && (
-            <img src={backgroundImage} alt="Background" className="absolute inset-0 w-full h-full object-cover" />
+            <img src={backgroundImage} alt="Design" className="absolute inset-0 w-full h-full object-cover" />
           )}
         </div>
 
@@ -526,7 +535,7 @@ export function DesignCanvas({
               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center group-hover:bg-primary/10 transition-colors">
                 <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
-              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload a background to start</p>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">Upload a design to start</p>
             </div>
           </label>
         )}
@@ -541,7 +550,7 @@ export function DesignCanvas({
               onDrag={(x, y) => onImageHolderChange({ ...imageHolder, x, y })}
               onResizeDiameter={(d) => onImageHolderChange({ ...imageHolder, diameter: d })}
               onCircleChange={(x, y, d) => onImageHolderChange({ x, y, diameter: d })}
-              minDiameter={300} maxDiameter={900}
+              minDiameter={256} maxDiameter={900}
               userPhoto={userPhoto}
               samplePhoto={samplePhoto}
               photoShape={photoShape} photoCornerRadius={photoCornerRadius}

@@ -3,7 +3,7 @@
 Exported by **Poster Studio** web tool.  
 Target platform: **React Native, Android-first**.
 
-**Payload contract:** the studio builds a `CompactTemplateJSON` object and sends it to the backend as `raw_config` on template create. The background file is uploaded to object storage first; `bg` in the JSON is the **returned object key** (e.g. `uploads/background-2026-04-19T10-20-30.jpg`), not a data URL. Your mobile app should prefix that key with your **media / CDN base URL** when loading the image. **`dc`** is the dominant background colour (`#RRGGBB`) for **both images and videos**, and is included for theming and the name strip. Current studio export always sends a string; use **`#000000`** if the field is missing, `null`, or invalid in older payloads.
+**Payload contract:** the studio builds a `CompactTemplateJSON` object and sends it to the backend as `raw_config` on template create. The background file is uploaded to object storage first; `bg` in the JSON is the **returned object key** (e.g. `uploads/background-2026-04-19T10-20-30.jpg`), not a data URL. Your mobile app should prefix that key with your **media / CDN base URL** when loading the image. In **`nl === "strip"`** mode, Poster Studio now finalizes the media on-device before upload, so `bg` already includes the appended strip background for both images and videos. Uploaded PNG stickers are also baked into `bg` during export, so the consumer app does **not** receive sticker coordinates or a separate sticker asset in `raw_config`. **`dc`** is the dominant background colour (`#RRGGBB`) for **both images and videos**, and is included for theming and strip parity. Current studio export always sends a string; use **`#000000`** if the field is missing, `null`, or invalid in older payloads.
 
 ---
 
@@ -46,7 +46,7 @@ const scale = outputCanvasWidth / 1080;
 ```
 
 **Scale these by `scale`:**
-- `np.st.ts.fs` — font size. In strip mode the studio now exports this as a fixed **54px**.  
+- `np.st.ts.fs` — font size. In strip mode the studio now exports this as a fixed **48px**.  
 - `np.st.ts.ls` — letter spacing  
 - `np.st.ts.sh.ox`, `np.st.ts.sh.oy`, `np.st.ts.sh.bl` — shadow  
 - `ip.sw` — photo border width  
@@ -79,7 +79,6 @@ Your app chooses the font. Sizes and weights are font-agnostic.
   "t": true,
   "pc": ["Self"],
   "lg": ["English", "Hindi"],
-  "pn": "Festival-banner",
   "bg": "uploads/background-2026-04-19T10-20-30.jpg",
   "dc": "#E84393",
   "mt": "image",
@@ -98,11 +97,11 @@ Your app chooses the font. Sizes and weights are font-agnostic.
 | `t`  | boolean                | `true` = Self/Profile, `false` = Wishes/Upload |
 | `pc` | string[]               | Primary category tags |
 | `lg` | string[]               | Language tags |
-| `pn` | string                 | **Post name** — required non-empty trimmed string; same text as **`title`** on template create API. |
-| `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`; for videos it ends in `.mp4`. |
+| `pn` | string                 | Legacy only. Older payloads may still contain it, but new exports omit it because the consumer app injects the runtime person name. |
+| `bg` | string \| `null`       | **Object storage key** for the background (after presigned upload). Resolve with your CDN/app base URL. `null` if no background. For images the key ends in `.jpg`/`.png`; for videos it ends in `.mp4`. In strip mode this media already includes the appended strip background. Any uploaded PNG sticker is also already baked into this final media. |
 | `dc` | string (see note)     | **Dominant colour** (`#RRGGBB`) sampled from the background **image or video** (Color Thief). **Current studio** always emits a hex string; on extraction failure it sends **`#000000`**. Legacy payloads may use `null` or omit the key — treat those like **`#000000`** for strip rendering. |
 | `mt` | `"image"` \| `"video"` | Background media type. **`"image"`** = JPG/JPEG/PNG; **`"video"`** = MP4. Use this to decide whether to render `<Image>` or `<Video>` in your app. |
-| `nl` | `"strip"` \| `"overlay"` | **`"strip"`** = fixed bottom strip, text from **`pn`**, typography from **`np.st.ts`** (ignore **`np.x/y/w/h`**). **`"overlay"`** = full `np`. Missing `nl` → treat as `"overlay"`. |
+| `nl` | `"strip"` \| `"overlay"` | **`"strip"`** = fixed bottom strip; the strip background is baked into `bg`, while consumer apps should render the runtime person name using **`np.st.ts`** and ignore **`np.x/y/w/h`**. **`"overlay"`** = full `np`. Missing `nl` → treat as `"overlay"`. Sticker layout is never sent separately because stickers are baked into `bg` before upload. |
 | `ia` | object \| `null`       | Photo intro animation config. Present only for video templates when enabled; otherwise `null`. |
 | `li` | boolean                | Default **`false`**: **`sa`** selects go-live (**scheduled**). Set **`true`** for immediate publish once saved/processed (**`sa`** → **`null`**). |
 | `sa` | string \| **`null`**   | ISO 8601 UTC when **`li`** is **`false`** (typically in the future at export time). **`null`** when **`li`** is **`true`**. |
@@ -215,7 +214,7 @@ The renderer must check `nl` before deciding how to draw the name.
 
 - **Render a fixed full-width strip attached to the bottom edge of the *background*** — the poster’s total height = background band + strip (strip is **not** overlaid on the video/image pixels).
 - Strip height (design px): fixed **`72`**.
-- Strip background colour: pure black mixed with the dominant background colour (`dc`) at **50% opacity** — i.e. `R/G/B` of `dc` divided by 2. If `dc` is missing, `null`, or invalid, treat it as **`#000000`** (strip background is then pure black).
+- Strip background colour: pure black mixed with the dominant background colour (`dc`) at **50% opacity** — i.e. `R/G/B` of `dc` multiplied by `0.5`. If `dc` is missing, `null`, or invalid, treat it as **`#000000`** (strip background is then pure black).
 - **Text:** render **`pn`** using the same compact fields as overlay mode: **`np.st.ts`** — `fs` (font size, design px), `fw`, `c` (colour), `ls` (letter spacing), `sh` (shadow or `null`), `st` (stroke), `ta` (alignment). Vertically centre in the strip; horizontal padding should account for stroke/shadow like the overlay name band. **Single line**, ellipsis if needed. **Max width** of the text line: **80%** of canvas width (studio default; not a separate key in JSON today).
 - **Ignore `np` geometry** for strip mode only: **`np.x` / `np.y` / `np.w` / `np.h`** do not position the strip text (the strip is full width). Do **not** ignore **`np.st.ts`** — it drives strip typography.
 
@@ -498,5 +497,5 @@ See `src/templateSchema.ts` for the typed definition and `TEMPLATE_KEY_MAP` for 
 - **Background upload rules:** images accept JPG/JPEG/PNG up to **5 MB** and videos accept MP4 up to **100 MB**. No dimension/aspect-ratio whitelist remains; all backgrounds are normalized into the 1080-wide design space.
 - **Video backgrounds (`mt: "video"`):** studio accepts MP4 uploads alongside images. `bg` key ends in `.mp4`; `mt` is `"video"`. **`dc`** is sampled for **videos** as well as images (see strip section). `ar` may be any GCD-reduced ratio. Render with `<Video>` when `mt === "video"`.
 - **Photo intro animation (`ia`):** added compact animation payload for video templates only. Presets are directional (`bottom-to-top`, `top-to-bottom`, `left-to-right`, `right-to-left`) with duration seconds (`d`). Applies to the **photo layer** (`ip`), not the name text layer.
-- **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height fixed at **72px** and strip font size fixed at **54px**; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
+- **Name layout (`nl`):** default **`"strip"`** — bottom strip with **`pn`**, **`np.st.ts`** typography, **`np` geometry ignored**; strip height fixed at **72px** and strip font size fixed at **48px**; **`dc`** at 50% with black for strip fill. **`"overlay"`** = legacy full `np`. Missing `nl` → `"overlay"`.
 - **Dominant colour (`dc`) for video:** `dc` is extracted for **video** backgrounds (one or two frame samples; brighter result preferred) as well as images. Studio normalizes to **`#000000`** when sampling fails. Strip mode mixes black at 50% with `dc`; fallback dominant = **`#000000`**. Older docs incorrectly stated `dc` was always `null` for video.

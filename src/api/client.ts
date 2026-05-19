@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const BASE = import.meta.env.VITE_API_BASE_URL || 'https://testapi.getlokalapp.com';
-const NETWORK_DISABLED = import.meta.env.VITE_DISABLE_NETWORK === 'true';
+export const NETWORK_DISABLED = import.meta.env.VITE_DISABLE_NETWORK === 'true';
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'auth_token';
